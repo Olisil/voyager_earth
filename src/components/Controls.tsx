@@ -131,7 +131,7 @@ export function ColorPicker({ value, onChange, label }: { value: string; onChang
         />
       ))}
       <label className="color color-custom" title="Pick any colour">
-        <input type="color" aria-label={`Custom ${label.toLowerCase()}`} value={value} onChange={(e) => onChange(e.target.value.toUpperCase())} />
+        <input type="color" aria-label={`Custom ${label.toLowerCase()}`} value={value || "#bad70a"} onChange={(e) => onChange(e.target.value.toUpperCase())} />
       </label>
     </div>
   );

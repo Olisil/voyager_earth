@@ -61,10 +61,10 @@ const vt = (palette: Palette, title: string, swatch: MapLook["swatch"]): MapLook
 };
 
 export const MAP_LOOKS: MapLook[] = [
+  ofm("liberty", "Road atlas", true, ["#f8f4f0", "#a0c8f0", "#e9ac77"]),
   ofm("dark", "Dark", false, ["#1b1b1b", "#0b0b0b", "#3a3a3a"]),
   ofm("fiord", "Fiord blue", false, ["#45516e", "#38435c", "#7a8aa6"]),
   ofm("positron", "Light", true, ["#f2f2f0", "#cfd8dc", "#b9b9b9"]),
-  ofm("liberty", "Road atlas", true, ["#f8f4f0", "#a0c8f0", "#e9ac77"]),
   ofm("bright", "Bright streets", true, ["#f8f4f0", "#a0c8f0", "#fdbf6f"]),
   {
     id: "satellite",

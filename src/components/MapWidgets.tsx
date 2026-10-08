@@ -128,6 +128,9 @@ export function LegsPanel(props: {
   onStyle: (t: TransportId) => void;
   /** adds a new leg after the last point; undefined hides the button (e.g. GPX tracks) */
   onAddLeg?: () => void;
+  /** seconds each leg takes to draw, and a way to set them */
+  seconds: number[];
+  onSeconds: (legIndex: number, seconds: number) => void;
 }) {
   const [open, setOpen] = useState(true);
   const legs = props.model?.legs ?? [];
@@ -159,6 +162,7 @@ export function LegsPanel(props: {
                 ))}
               </select>
               <span className="leg-km">{l.km < 10 ? l.km.toFixed(1) : Math.round(l.km).toLocaleString("en")} km</span>
+              <LegSeconds value={props.seconds[l.index] ?? 0} label={`Leg ${l.index + 1} drawing time in seconds`} onChange={(v) => props.onSeconds(l.index, v)} />
             </li>
           ))}
         </ol>
@@ -228,5 +232,47 @@ export function PointPopover(props: {
         Remove point
       </button>
     </div>
+  );
+}
+
+/** Seconds with one decimal; typing is free, the value is applied on Enter or when leaving the field. */
+function LegSeconds(props: { value: number; label: string; onChange: (v: number) => void }) {
+  const [text, setText] = useState(props.value.toFixed(1));
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (!editing) setText(props.value.toFixed(1));
+  }, [props.value, editing]);
+  const commit = () => {
+    setEditing(false);
+    const v = Math.round(parseFloat(text.replace(",", ".")) * 10) / 10;
+    if (Number.isFinite(v) && v >= 0.1 && v <= 600) props.onChange(v);
+    else setText(props.value.toFixed(1));
+  };
+  return (
+    <label className="leg-secs" title="How long this leg takes to draw">
+      <input
+        type="number"
+        inputMode="decimal"
+        min={0.1}
+        max={600}
+        step={0.1}
+        aria-label={props.label}
+        value={text}
+        onFocus={() => setEditing(true)}
+        onChange={(e) => {
+          setEditing(true);
+          setText(e.target.value);
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          if (e.key === "Escape") {
+            setText(props.value.toFixed(1));
+            setEditing(false);
+          }
+        }}
+      />
+      <span aria-hidden>s</span>
+    </label>
   );
 }

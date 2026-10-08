@@ -24,6 +24,8 @@ export interface RoutePoint {
   transport?: TransportId;
   /** Seconds the line stops here. */
   pause?: number;
+  /** Seconds the leg that starts at this point takes to draw (unset = share of the travel time). */
+  legSeconds?: number;
   /** Keep a hard corner here even when the route is smoothed. */
   sharp?: boolean;
 }
@@ -37,6 +39,7 @@ export interface Route {
 }
 
 export interface TransportStyle {
+  /** a hex colour, or "auto" to follow the map (lib/colors.ts) */
   color: string;
   width: number;
   line: LineStyle;
@@ -140,7 +143,7 @@ export function defaultTransportStyles(): Record<TransportId, TransportStyle> {
   return Object.fromEntries(
     TRANSPORT_IDS.map((id) => {
       const t = TRANSPORTS[id];
-      return [id, { color: t.color, width: 6, line: t.line, symbol: "badge", symbolColor: null } satisfies TransportStyle];
+      return [id, { color: "auto", width: 6, line: t.line, symbol: "badge", symbolColor: null } satisfies TransportStyle];
     }),
   ) as Record<TransportId, TransportStyle>;
 }
@@ -153,11 +156,11 @@ export function newScene(name = "Scene 1", lookFrom?: Scene): Scene {
     look: lookFrom
       ? structuredClone(lookFrom.look)
       : {
-          theme: "dark",
+          theme: "liberty",
           terrain: false,
           terrainStyle: "shading",
           placeNames: true,
-          outline: false,
+          outline: true,
           showAhead: true,
           symbolScale: 1,
           transports: defaultTransportStyles(),
@@ -229,7 +232,12 @@ function coerceScene(raw: Partial<Scene>, i: number): Scene {
   const base = newScene(`Scene ${i + 1}`);
   const look = { ...base.look, ...raw.look };
   look.transports = { ...base.look.transports };
-  for (const id of TRANSPORT_IDS) look.transports[id] = { ...base.look.transports[id], ...raw.look?.transports?.[id] };
+  for (const id of TRANSPORT_IDS) {
+    const t = { ...base.look.transports[id], ...raw.look?.transports?.[id] };
+    // Colours left at the old built-in default now follow the map instead.
+    if (t.color && t.color.toUpperCase() === TRANSPORTS[id].color.toUpperCase()) t.color = "auto";
+    look.transports[id] = t;
+  }
   look.compass = { ...base.look.compass, ...raw.look?.compass };
   return {
     ...base,

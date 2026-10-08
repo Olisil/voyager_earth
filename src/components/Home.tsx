@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { deleteProject, downloadProjectFile, duplicateProject, importProjectFile, listProjects, saveProject } from "../lib/db";
 import { toXY, unwrap } from "../lib/geo";
+import { lineColor } from "../lib/colors";
 import { navigate } from "../router";
 import { ThemeToggle } from "../theme";
 import logoUrl from "../assets/voyager-earth-logo.svg";
@@ -41,7 +42,7 @@ function RouteThumb({ project }: { project: Project }) {
     .filter((_, i) => i % step === 0 || i === pts.length - 1)
     .map(([x, y], i) => `${i ? "L" : "M"}${(ox + (x - x0) * s).toFixed(1)} ${(oy + (y - y0) * s).toFixed(1)}`)
     .join(" ");
-  const color = scene.look.transports[scene.route.startTransport].color;
+  const color = lineColor(scene, scene.route.startTransport);
   const [ex, ey] = pts[pts.length - 1];
   return (
     <svg className="thumb" viewBox={`0 0 ${W} ${H}`} aria-hidden>

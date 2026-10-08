@@ -1997,8 +1997,8 @@ label.source-card:hover,
   right: var(--space--12);
 }
 .pos-legs {
-  right: 56px;
-  bottom: var(--space--40);
+  left: var(--space--12);
+  top: 64px;
 }
 .pos-popover {
   z-index: 4;
@@ -2246,4 +2246,59 @@ select option {
   .look-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* ================= v5 ================= */
+.legs {
+  width: 300px;
+}
+.legs li {
+  grid-template-columns: 26px 1fr auto auto;
+}
+.leg-secs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-placeholder);
+}
+.leg-secs input {
+  width: 52px;
+  height: 30px;
+  padding: 0 4px;
+  border: var(--stroke--default) solid var(--dim-grey);
+  border-radius: var(--radius--medium);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+}
+.leg-secs input::-webkit-inner-spin-button,
+.leg-secs input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.leg-secs input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.auto-colour {
+  margin-top: var(--space--8);
+  gap: var(--space--8);
+}
+.auto-colour.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.auto-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius--small);
+  border: 1px solid var(--dim-grey);
+}
+/* Transport style chips: all equally bright, fixed order, only the chosen one highlighted. */
+.transport.unused:not(.on) {
+  opacity: 1;
 }

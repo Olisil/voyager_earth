@@ -121,7 +121,18 @@ export function CameraPanel(props: { scene: Scene; update: (fn: (s: Scene) => Sc
       )}
 
       <Section title="Timing" hint="Legs share this time by distance and speed: walking is slower than driving, flights are faster.">
-        <Slider label="Line travel time" value={scene.timing.duration} min={3} max={90} step={0.5} format={(v) => `${v} s`} onChange={(v) => setTiming({ duration: v })} />
+        <Slider label="Line travel time" value={scene.timing.duration} min={3} max={90} step={0.5} format={(v) => `${v} s`} onChange={(v) =>
+            // Legs with their own seconds stretch with the total, so the proportions stay.
+            update((s) => {
+              const k = v / Math.max(0.5, s.timing.duration);
+              return {
+                ...s,
+                timing: { ...s.timing, duration: v },
+                route: { ...s.route, points: s.route.points.map((p) => (p.legSeconds ? { ...p, legSeconds: Math.max(0.1, Math.round(p.legSeconds * k * 10) / 10) } : p)) },
+              };
+            })
+          }
+        />
         <Segmented
           label="Speed"
           value={scene.timing.easing}

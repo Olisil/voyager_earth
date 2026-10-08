@@ -6,7 +6,7 @@ import { creditFor, ExportUnsupportedError, renderVideo } from "../lib/exporter"
 import { boundsOf, chordBearing, haversineKm, parseGpx } from "../lib/geo";
 import { TRANSPORT_IDS } from "../lib/transports";
 import { ensureTheme, isBrightLook, showEditing, showFrame } from "../lib/mapScene";
-import { buildRouteModel, makeTimeline, type RouteModel } from "../lib/model";
+import { buildRouteModel, legSeconds, makeTimeline, type RouteModel } from "../lib/model";
 import { navigate } from "../router";
 import { ThemeToggle } from "../theme";
 import { ASPECTS, uid, type Aspect, type LngLat, type Project, type Route, type Scene, type SignStyle, type TransportId } from "../lib/types";
@@ -383,6 +383,18 @@ function EditorLoaded({ initial }: { initial: Project }) {
     pts.push({ at: [q.lng, q.lat] });
     setRoute({ ...r, points: pts, startTransport });
     setTravelBy(next);
+  };
+
+  /** Give one leg its own drawing time; the other legs keep theirs. */
+  const setLegSecondsFor = (legIndex: number, secs: number) => {
+    if (!model) return;
+    const leg = model.legs[legIndex];
+    const before = legSeconds(model, scene)[legIndex] ?? secs;
+    updateScene((s) => ({
+      ...s,
+      route: { ...s.route, points: s.route.points.map((p, i) => (i === leg.p0 ? { ...p, legSeconds: secs } : p)) },
+      timing: { ...s.timing, duration: Math.max(0.5, Math.round((s.timing.duration + secs - before) * 10) / 10) },
+    }));
   };
 
   const setLegTransport = (legIndex: number, tr: TransportId) => {
@@ -789,7 +801,7 @@ function EditorLoaded({ initial }: { initial: Project }) {
                 <SearchBox map={map} />
               </Floating>
             )}
-            {(step === "route" || step === "look") && !playing && !rendering && (
+            {step === "route" && !playing && !rendering && (
               model && model.legs.length > 0 ? (
                 <Floating id="legs" className="pos-legs" bounds={{ w: frame.w, h: frame.h }}>
                   <LegsPanel
@@ -797,6 +809,8 @@ function EditorLoaded({ initial }: { initial: Project }) {
                     model={model}
                     onChange={setLegTransport}
                     onAddLeg={scene.route.kind === "drawn" && !playing ? addLeg : undefined}
+                    seconds={model ? legSeconds(model, scene) : []}
+                    onSeconds={setLegSecondsFor}
                     onStyle={(tr) => {
                       setFocusTransport(tr);
                       goStep("look");

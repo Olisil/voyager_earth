@@ -141,6 +141,9 @@ export interface Timeline {
   signTimes: Record<string, number>;
   /** where each sign sits along the route */
   signS: Record<string, number>;
+  /** legs weighted by their drawing seconds */
+  legs: LegInfo[];
+  W: number;
 }
 
 export interface TimeState {
@@ -153,13 +156,19 @@ export interface TimeState {
 const ease = (x: number, on: boolean) => (on ? 0.5 - 0.5 * Math.cos(Math.PI * x) : x);
 const easeInv = (e: number, on: boolean) => (on ? Math.acos(Math.min(1, Math.max(-1, 1 - 2 * e))) / Math.PI : e);
 
-function wFromS(m: RouteModel, s: number) {
-  const l = legAtS(m, s);
+function wFromS(legs: LegInfo[], s: number) {
+  let l = legs[legs.length - 1];
+  for (const leg of legs) {
+    if (s <= leg.s1) {
+      l = leg;
+      break;
+    }
+  }
   return l.w0 + (Math.min(l.s1, Math.max(l.s0, s)) - l.s0) / l.speed;
 }
-function sFromW(m: RouteModel, w: number) {
-  let l = m.legs[m.legs.length - 1];
-  for (const leg of m.legs) {
+function sFromW(legs: LegInfo[], w: number) {
+  let l = legs[legs.length - 1];
+  for (const leg of legs) {
     if (w <= leg.w1) {
       l = leg;
       break;
@@ -168,14 +177,40 @@ function sFromW(m: RouteModel, w: number) {
   return Math.min(l.s1, l.s0 + (w - l.w0) * l.speed);
 }
 
+/**
+ * Seconds each leg takes to draw. A leg with its own seconds (set in the legs panel) keeps them;
+ * the others share what is left of the line travel time by length and speed.
+ */
+export function legSeconds(model: RouteModel, scene: Scene): number[] {
+  const pts = scene.route.points;
+  const own = model.legs.map((l) => pts[l.p0]?.legSeconds);
+  const fixed = own.reduce<number>((a, v) => a + (v ?? 0), 0);
+  const autoW = model.legs.reduce((a, l, i) => a + (own[i] === undefined ? l.w1 - l.w0 : 0), 0);
+  const left = Math.max(0, scene.timing.duration - fixed);
+  return model.legs.map((l, i) => own[i] ?? (autoW > 0 ? Math.max(0.1, (left * (l.w1 - l.w0)) / autoW) : 0.1));
+}
+
+/** The route's legs re-weighted by their seconds, so time maps to distance leg by leg. */
+function timedLegs(model: RouteModel, scene: Scene): { legs: LegInfo[]; W: number } {
+  const secs = legSeconds(model, scene);
+  let w = 0;
+  const legs = model.legs.map((l, i) => {
+    const w0 = w;
+    w += secs[i];
+    return { ...l, w0, w1: w, speed: (l.s1 - l.s0) / Math.max(1e-6, secs[i]) };
+  });
+  return { legs, W: w };
+}
+
 export function makeTimeline(model: RouteModel | null, scene: Scene, output: Project["output"]): Timeline {
-  const D = Math.max(0.5, scene.timing.duration);
+  const timed = model ? timedLegs(model, scene) : null;
+  const D = Math.max(0.5, timed ? timed.W : scene.timing.duration);
   const easeOn = scene.timing.easing === "ease";
   const pauses: Pause[] = [];
   const signTimes: Record<string, number> = {};
   const signS: Record<string, number> = {};
   if (model) {
-    const uAtS = (s: number) => (model.W > 0 ? D * easeInv(wFromS(model, s) / model.W, easeOn) : 0);
+    const uAtS = (s: number) => (timed!.W > 0 ? D * easeInv(wFromS(timed!.legs, s) / timed!.W, easeOn) : 0);
     scene.route.points.forEach((p, i) => {
       if (p.pause && p.pause > 0 && scene.route.kind === "drawn") {
         const s = nearestS(model.path, toXY(model.points[i]));
@@ -203,6 +238,8 @@ export function makeTimeline(model: RouteModel | null, scene: Scene, output: Pro
     total: output.holdStart + D + pauseTotal + output.holdEnd,
     signTimes,
     signS,
+    legs: timed?.legs ?? [],
+    W: timed?.W ?? 0,
   };
 }
 
@@ -221,7 +258,8 @@ export function timeState(model: RouteModel, tl: Timeline, t: number, easing: Sc
   }
   u = Math.min(u, tl.D);
   const e = ease(u / tl.D, easing === "ease");
-  return { s: sFromW(model, e * model.W), u, paused };
+  void model;
+  return { s: tl.legs.length ? sFromW(tl.legs, e * tl.W) : 0, u, paused };
 }
 
 export function projectDuration(project: Project, models: (RouteModel | null)[]): number {

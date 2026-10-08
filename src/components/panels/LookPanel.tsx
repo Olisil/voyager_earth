@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ColorPicker, Field, Fold, Segmented, Slider, Toggle } from "../Controls";
 import type { Map as MLMap } from "maplibre-gl";
 import { lookById, MAP_LOOKS, QUICK_LOOKS } from "../../lib/mapStyles";
+import { AUTO, autoColor } from "../../lib/colors";
 import { cachedThumb } from "../../lib/thumbnails";
 import { StyleModal } from "../StyleModal";
 import type { RouteModel } from "../../lib/model";
@@ -31,7 +32,6 @@ export function LookPanel(props: {
     update((s) => ({ ...s, look: { ...s.look, transports: { ...s.look.transports, [picked]: { ...s.look.transports[picked], ...st } } } }));
   const setCompass = (c: Partial<Scene["look"]["compass"]>) => setLook({ compass: { ...look.compass, ...c } });
 
-  const others = TRANSPORT_IDS.filter((id) => !used.includes(id));
 
   return (
     <>
@@ -91,13 +91,13 @@ export function LookPanel(props: {
       <Fold title="Line and symbol">
         <Field label="Transport styles">
           <div className="transports" role="radiogroup" aria-label="Transport to style">
-            {[...used, ...others].map((id) => (
+            {TRANSPORT_IDS.map((id) => (
               <button
                 key={id}
                 type="button"
                 role="radio"
                 aria-checked={picked === id}
-                className={`transport${picked === id ? " on" : ""}${used.includes(id) ? "" : " unused"}`}
+                className={`transport${picked === id ? " on" : ""}`}
                 onClick={() => setPicked(id)}
               >
                 <img src={transportIcon(id, look.transports[id].color, 28)} alt="" width={22} height={22} />
@@ -115,7 +115,11 @@ export function LookPanel(props: {
             <small>{legCount(picked) ? `Changes ${legCount(picked) === 1 ? "the" : "every"} ${TRANSPORTS[picked].label.toLowerCase()} leg` : "Not used in this route yet"}</small>
           </p>
           <Field label="Colour">
-            <ColorPicker label="Line colour" value={style.color} onChange={(c) => setStyle({ color: c })} />
+            <ColorPicker label="Line colour" value={style.color === AUTO ? "" : style.color} onChange={(c) => setStyle({ color: c })} />
+            <button type="button" className={`btn btn-small auto-colour${style.color === AUTO ? " on" : ""}`} aria-pressed={style.color === AUTO} onClick={() => setStyle({ color: AUTO })}>
+              <span className="auto-dot" style={{ background: autoColor(look.theme, picked) }} aria-hidden />
+              Auto, fits the map
+            </button>
           </Field>
           <Slider label="Thickness" value={style.width} min={2} max={14} step={1} format={(v) => `${v} px`} onChange={(v) => setStyle({ width: v })} />
           <Field label="Line">

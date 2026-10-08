@@ -1,6 +1,7 @@
 import maplibregl, { type GeoJSONSource, type Map as MLMap } from "maplibre-gl";
 import mlcontour from "maplibre-contour";
 import { lookById } from "./mapStyles";
+import { lineColor } from "./colors";
 import type { FrameState } from "./camera";
 import { pointAt, toLngLat, type Path } from "./geo";
 import type { RouteModel } from "./model";
@@ -67,13 +68,25 @@ export function createMap(container: HTMLElement, scene: Scene): MLMap {
   return map;
 }
 
+/**
+ * Where the route goes in the layer stack: above every road, building and area of the base map,
+ * but under its labels. Some styles interleave early labels (water names) before the roads, so
+ * this is the first label after the last line or fill layer, not simply the first label.
+ */
 function firstSymbolLayer(map: MLMap): string | undefined {
-  return map.getStyle().layers?.find((l) => l.type === "symbol" && !l.id.startsWith("fv-"))?.id;
+  const layers = (map.getStyle().layers ?? []).filter((l) => !l.id.startsWith("fv-"));
+  let lastShape = -1;
+  layers.forEach((l, i) => {
+    if (l.type === "line" || l.type === "fill" || l.type === "fill-extrusion" || l.type === "raster" || l.type === "hillshade") lastShape = i;
+  });
+  return layers.slice(lastShape + 1).find((l) => l.type === "symbol")?.id;
 }
 
 /** Adds the app's sources and layers. Safe to call again after a style change. */
 export function installScene(map: MLMap) {
   const below = firstSymbolLayer(map);
+  // Relief sits on the ground, under roads and labels.
+  const belowRoads = (map.getStyle().layers ?? []).find((l) => !l.id.startsWith("fv-") && (l.type === "line" || l.type === "symbol"))?.id;
   for (const id of [SRC.full, SRC.drawn, SRC.ctrl]) {
     if (!map.getSource(id)) map.addSource(id, { type: "geojson", data: EMPTY });
   }
@@ -102,7 +115,7 @@ export function installScene(map: MLMap) {
       layout: { visibility: "none" },
       paint: { "hillshade-exaggeration": 0.4, "hillshade-shadow-color": "#1a2026", "hillshade-highlight-color": "#ffffff" },
     },
-    below,
+    belowRoads,
   );
   add(
     {
@@ -117,7 +130,7 @@ export function installScene(map: MLMap) {
         "line-width": ["match", ["get", "level"], 1, 0.9, 0.5],
       },
     },
-    below,
+    belowRoads,
   );
   add(
     {
@@ -252,7 +265,7 @@ function legFeatures(scene: Scene, model: RouteModel, upTo: number): GeoJSON.Fea
     const st = scene.look.transports[leg.transport];
     feats.push({
       type: "Feature",
-      properties: { color: st.color, width: st.width, line: st.line, leg: leg.index },
+      properties: { color: lineColor(scene, leg.transport), width: st.width, line: st.line, leg: leg.index },
       geometry: { type: "LineString", coordinates: coords },
     });
   }
@@ -275,7 +288,7 @@ export function showEditing(map: MLMap, scene: Scene, model: RouteModel | null, 
         properties: {
           i,
           ...(i === 0 ? { end: "start" } : i === pts.length - 1 ? { end: "finish" } : {}),
-          ...(legT ? { legStart: 1, legColor: scene.look.transports[legT].color } : {}),
+          ...(legT ? { legStart: 1, legColor: lineColor(scene, legT) } : {}),
           ...(p.pause ? { pause: p.pause } : {}),
         },
         geometry: { type: "Point", coordinates: unwrapped[i] ?? p.at },

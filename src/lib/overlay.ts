@@ -1,7 +1,8 @@
 import type { FrameState } from "./camera";
-import { chordBearing, pointAt, toLngLat } from "./geo";
+import { pointAt, toLngLat } from "./geo";
 import type { RouteModel, Timeline } from "./model";
 import { drawTopIcon, inkFor, topIcon } from "./topdown";
+import { lineColor } from "./colors";
 import type { LngLat, Scene, Sign } from "./types";
 
 export const FONT_HEAD = '"Neugrotypeface", "Raleway Variablefont Wght", "Raleway Variable", sans-serif';
@@ -46,18 +47,38 @@ const backOut = (x: number) => {
 
 // ---------- tip symbol ----------
 
-/** A point on the route `px` screen pixels behind the tip, with its screen heading. */
+/**
+ * A point on the route `px` screen pixels behind the tip, and the direction the drawn line runs
+ * there ON SCREEN. The heading is measured between projected points of the path itself, so a
+ * pointer always lies along the line, whatever the pitch, terrain or rotation of the map.
+ */
 function behind(o: OverlayInput, px: number): { x: number; y: number; heading: number } | null {
   const f = o.frame;
   if (!f || !o.model || o.zoom === undefined) return null;
   const path = o.model.path;
-  const s = Math.max(0, f.s - px / (512 * Math.pow(2, o.zoom)));
-  const e = 2 / (512 * Math.pow(2, o.zoom));
-  const a = Math.max(0, s - e);
-  const b = Math.min(path.length, s + e);
-  const bearing = chordBearing(path, a, b) ?? f.tipBearing;
+  const unit = 1 / (512 * Math.pow(2, o.zoom));
+  const s = Math.max(0, Math.min(path.length, f.s - px * unit));
   const p = o.toScreen(toLngLat(pointAt(path, s)));
-  return { x: p.x, y: p.y, heading: ((bearing - o.mapBearing) * Math.PI) / 180 };
+  return { x: p.x, y: p.y, heading: screenHeading(o, s) ?? ((f.tipBearing - o.mapBearing) * Math.PI) / 180 };
+}
+
+function screenHeading(o: OverlayInput, s: number): number | null {
+  if (!o.model || o.zoom === undefined) return null;
+  const path = o.model.path;
+  const d = 6 / (512 * Math.pow(2, o.zoom));
+  let a = s - d;
+  let b = s;
+  if (a < 0) {
+    a = 0;
+    b = Math.min(path.length, d);
+  }
+  if (b - a <= 0) return null;
+  const pa = o.toScreen(toLngLat(pointAt(path, a)));
+  const pb = o.toScreen(toLngLat(pointAt(path, b)));
+  const dx = pb.x - pa.x;
+  const dy = pb.y - pa.y;
+  if (Math.hypot(dx, dy) < 0.01) return null;
+  return Math.atan2(dx, -dy);
 }
 
 function drawSymbol(g: CanvasRenderingContext2D, o: OverlayInput) {
@@ -66,8 +87,8 @@ function drawSymbol(g: CanvasRenderingContext2D, o: OverlayInput) {
   const st = o.scene.look.transports[f.leg.transport];
   if (st.symbol === "none") return;
   const p = o.toScreen(f.tip);
-  const color = st.symbolColor ?? st.color;
-  const heading = ((f.tipBearing - o.mapBearing) * Math.PI) / 180;
+  const color = st.symbolColor ?? lineColor(o.scene, f.leg.transport);
+  const heading = screenHeading(o, f.s) ?? ((f.tipBearing - o.mapBearing) * Math.PI) / 180;
   const k = o.scene.look.symbolScale;
   if (st.symbol === "badge") {
     drawTopDown(g, o, p, heading, k);
