@@ -1,7 +1,8 @@
 export type LngLat = [number, number];
 
-export type ThemeId = "positron" | "liberty" | "bright" | "dark" | "fiord" | "satellite";
-export type TransportId = "car" | "motorcycle" | "bicycle" | "walk" | "bus" | "train" | "boat" | "plane" | "balloon" | "airship";
+/** Id of a map look in `MAP_LOOKS` (lib/mapStyles.ts). */
+export type ThemeId = string;
+export type TransportId = "car" | "motorcycle" | "bicycle" | "walk" | "bus" | "train" | "boat" | "plane" | "balloon" | "airship" | "arrow";
 export type LineStyle = "solid" | "dashed" | "dotted";
 export type SymbolKind = "badge" | "arrow" | "dot" | "none";
 export type SignStyle = "plate" | "tag" | "pin" | "flag" | "caption" | "photo";

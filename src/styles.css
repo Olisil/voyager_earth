@@ -1895,10 +1895,11 @@ label.source-card:hover,
   white-space: nowrap;
   transition: color var(--ease);
 }
+/* Header controls highlight in signal green in both modes: the header plate is always dark. */
 .crumb-link:hover,
 .crumb-link:active,
 .crumb-link:focus-visible {
-  color: var(--persist-racy-green);
+  color: var(--persist-signal-green);
 }
 .crumb-sep {
   font-weight: 600;
@@ -1930,7 +1931,7 @@ label.source-card:hover,
 .icon-button:hover,
 .icon-button:active,
 .icon-button.is-active {
-  color: var(--persist-racy-green);
+  color: var(--persist-signal-green);
 }
 
 /* Editor layout: no panel borders; the map area is a rounded panel like the header. */
@@ -1996,7 +1997,7 @@ label.source-card:hover,
   right: var(--space--12);
 }
 .pos-legs {
-  right: var(--space--12);
+  right: 56px;
   bottom: var(--space--40);
 }
 .pos-popover {
@@ -2042,4 +2043,207 @@ label.source-card:hover,
   .editor > .panel { grid-row: 4; }
   .app-logo img { width: 150px; }
   .app-header .project-name { width: 140px; }
+}
+
+/* ================= v4 ================= */
+
+/* Video shape select: quiet like the header's icon button, signal green on hover and focus. */
+.editor > .steps .aspect-select {
+  width: auto;
+  height: 36px;
+  padding: 0 var(--space--8);
+  border: var(--stroke--default) solid var(--dim-grey);
+  border-radius: var(--radius--medium);
+  background-color: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: color var(--ease), border-color var(--ease);
+}
+.editor > .steps .aspect-select:hover,
+.editor > .steps .aspect-select:focus,
+.editor > .steps .aspect-select:active {
+  border-color: var(--persist-signal-green);
+  color: var(--persist-signal-green);
+  outline: none;
+}
+html.dark-mode select {
+  color-scheme: dark;
+}
+select option {
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+}
+
+/* The editor fills the window; the page never scrolls behind it. */
+@media (min-width: 901px) {
+  html.editor-open,
+  html.editor-open body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  html.editor-open .editor {
+    height: 100vh;
+    height: 100dvh;
+  }
+}
+.panel-body,
+.legs ol,
+.look-grid {
+  overscroll-behavior: contain;
+}
+
+/* Zoom and compass, stacked above the attribution button. */
+.map-controls {
+  position: absolute;
+  right: 10px;
+  bottom: 42px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  padding: 2px;
+  border: var(--stroke--default) solid var(--dim-grey);
+  border-radius: var(--radius--medium);
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+.map-ctl {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color var(--ease), color var(--ease);
+}
+.map-ctl + .map-ctl {
+  border-top: var(--stroke--hairline) solid var(--bg-surface-muted);
+  border-radius: 0 0 4px 4px;
+}
+.map-ctl:hover:not([aria-disabled="true"]) {
+  background: var(--dim-grey);
+  color: var(--persist-text-bright);
+}
+.map-ctl[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+.map-ctl svg {
+  transition: transform 120ms linear;
+}
+
+.legs-add {
+  margin-top: var(--space--4);
+}
+
+/* Map look picker */
+.theme-thumb {
+  display: block;
+  width: 100%;
+  height: 34px;
+  object-fit: cover;
+  border-radius: var(--radius--small);
+}
+.look-modal {
+  position: fixed;
+  z-index: 70;
+  width: min(640px, calc(100vw - 16px));
+  max-height: min(72vh, 720px);
+  display: flex;
+  flex-direction: column;
+  border: var(--stroke--default) solid var(--dim-grey);
+  border-radius: 12px;
+  background: var(--bg-page);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+.look-modal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space--12);
+  padding: var(--space--12) var(--space--12) var(--space--12) var(--space--16);
+  border-bottom: var(--stroke--hairline) solid var(--bg-surface-muted);
+  cursor: grab;
+  user-select: none;
+}
+.look-modal-head .hint {
+  margin: 0;
+  flex: 1;
+}
+.look-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space--12);
+  padding: var(--space--16);
+  overflow-y: auto;
+}
+.look-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space--8);
+  padding: var(--space--4) var(--space--4) var(--space--8);
+  border: var(--stroke--default) solid var(--dim-grey);
+  border-radius: var(--radius--medium);
+  background: none;
+  text-align: left;
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--ease), color var(--ease);
+}
+.look-tile:hover {
+  border-color: var(--text-placeholder);
+}
+.look-tile.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.look-tile img,
+.look-swatch {
+  display: block;
+  width: 100%;
+  aspect-ratio: 8 / 5;
+  object-fit: cover;
+  border-radius: var(--radius--small);
+}
+.look-swatch {
+  position: relative;
+  overflow: hidden;
+}
+.look-swatch span:nth-child(1) {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 55%;
+  height: 60%;
+  border-top-left-radius: 60% 80%;
+}
+.look-swatch span:nth-child(2) {
+  position: absolute;
+  left: 8%;
+  right: 30%;
+  top: 38%;
+  height: 3px;
+  transform: rotate(-10deg);
+}
+.look-loading {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  font-size: 11px;
+  color: rgba(128, 128, 128, 0.9);
+}
+.look-title {
+  padding: 0 var(--space--4);
+}
+@media (max-width: 700px) {
+  .look-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }

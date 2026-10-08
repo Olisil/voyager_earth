@@ -86,6 +86,13 @@ browser by maplibre-contour from the same terrain tiles).
 Panels over the map can be dragged by their grip (double-click the grip to put one back).
 Ctrl+Z / ⌘Z undoes route edits, Ctrl+Shift+Z / ⌘⇧Z or Ctrl+Y redoes.
 
+## Map looks
+
+`lib/mapStyles.ts` lists 30 looks: five OpenFreeMap styles, Sentinel-2 imagery, and 24 VersaTiles
+palettes (Google-, Apple- and Bing-like looks, toner, positron, dark matter and more) built in the
+browser with `@versatiles/style` on free OpenStreetMap tiles. "More map looks" opens a draggable
+picker whose previews are rendered one at a time, around the current map view.
+
 ## Not yet built
 
 More map themes, your own map image or symbol, photo at the tip, zoom per

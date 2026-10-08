@@ -325,9 +325,31 @@ Object.assign(TRANSPORTS, {
       g.fill();
     },
   },
+  arrow: {
+    id: "arrow",
+    label: "Arrow",
+    color: "#E6E6E6",
+    line: "solid",
+    speed: 1,
+    rotates: true,
+    flight: false,
+    glyph(g: CanvasRenderingContext2D, r: number, _bg: string, fg: string) {
+      g.fillStyle = fg;
+      g.beginPath();
+      g.moveTo(0.62 * r, 0);
+      g.lineTo(-0.5 * r, -0.46 * r);
+      g.lineTo(-0.24 * r, 0);
+      g.lineTo(-0.5 * r, 0.46 * r);
+      g.closePath();
+      g.fill();
+    },
+  },
 });
 
-export const TRANSPORT_IDS = Object.keys(TRANSPORTS) as TransportId[];
+/** Neutral pointer first, then ground, water and air. */
+export const TRANSPORT_ORDER: TransportId[] = ["arrow", "walk", "bicycle", "motorcycle", "car", "bus", "train", "boat", "plane", "balloon", "airship"];
+
+export const TRANSPORT_IDS = TRANSPORT_ORDER;
 
 const ICON_BG = "#0e0e0e";
 /** The round side-view icon used in menus and lists: always a white glyph on black. */

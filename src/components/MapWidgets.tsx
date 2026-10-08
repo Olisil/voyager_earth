@@ -126,6 +126,8 @@ export function LegsPanel(props: {
   model: RouteModel | null;
   onChange: (legIndex: number, t: TransportId) => void;
   onStyle: (t: TransportId) => void;
+  /** adds a new leg after the last point; undefined hides the button (e.g. GPX tracks) */
+  onAddLeg?: () => void;
 }) {
   const [open, setOpen] = useState(true);
   const legs = props.model?.legs ?? [];
@@ -160,6 +162,11 @@ export function LegsPanel(props: {
             </li>
           ))}
         </ol>
+      )}
+      {open && props.onAddLeg && (
+        <button type="button" className="btn btn-secondary btn-small btn-wide legs-add" onClick={props.onAddLeg}>
+          + Add leg
+        </button>
       )}
     </div>
   );

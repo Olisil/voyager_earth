@@ -1,10 +1,11 @@
 import type { Map as MLMap } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fitView, frameAt } from "../lib/camera";
+import { frameAt } from "../lib/camera";
 import { downloadBlob, downloadProjectFile, duplicateProject, getProject, importProjectFile, saveProject, slug } from "../lib/db";
 import { creditFor, ExportUnsupportedError, renderVideo } from "../lib/exporter";
-import { boundsOf, haversineKm, parseGpx } from "../lib/geo";
-import { BRIGHT_THEMES, ensureTheme, showEditing, showFrame } from "../lib/mapScene";
+import { boundsOf, chordBearing, haversineKm, parseGpx } from "../lib/geo";
+import { TRANSPORT_IDS } from "../lib/transports";
+import { ensureTheme, isBrightLook, showEditing, showFrame } from "../lib/mapScene";
 import { buildRouteModel, makeTimeline, type RouteModel } from "../lib/model";
 import { navigate } from "../router";
 import { ThemeToggle } from "../theme";
@@ -17,6 +18,7 @@ import { LookPanel } from "./panels/LookPanel";
 import { RoutePanel } from "./panels/RoutePanel";
 import { SignsPanel } from "./panels/SignsPanel";
 import { Floating } from "./Floating";
+import { MapControls } from "./MapControls";
 import logoUrl from "../assets/voyager-earth-logo.svg";
 import { Segmented } from "./Controls";
 
@@ -138,6 +140,12 @@ function EditorLoaded({ initial }: { initial: Project }) {
     [sceneIdx, updateScene],
   );
 
+  // The editor fills the window; the page itself never scrolls (except the stacked phone layout).
+  useEffect(() => {
+    document.documentElement.classList.add("editor-open");
+    return () => document.documentElement.classList.remove("editor-open");
+  }, []);
+
   // ---- autosave
   useEffect(() => {
     const id = setTimeout(() => {
@@ -187,22 +195,29 @@ function EditorLoaded({ initial }: { initial: Project }) {
   }, [map, scene.id, frame.w]);
 
   // ---- what the map shows
-  const brightMap = BRIGHT_THEMES.has(scene.look.theme);
+  const savedView = useRef<{ center: [number, number]; zoom: number; bearing: number; pitch: number } | null>(null);
+  const brightMap = isBrightLook(scene.look.theme);
   useEffect(() => {
     if (!map || rendering) return;
     let cancelled = false;
     ensureTheme(map, scene).then(() => {
       if (cancelled) return;
+      const vp = { width: frame.w, height: frame.h };
       if (mode !== "frame" || !model) {
         showEditing(map, scene, model, mode === "route-edit");
-        overlayRef.current = { scene, frame: null, timeline, t: null, credit: null, selectedSign: step === "signs" ? selectedSign : null, model, brightMap };
+        // Show the travel type's pointer (train, footsteps …) where the route ends, while editing.
+        const end = model ? { ...frameAt(scene, model, timeline, timeline.total, vp), camera: null } : null;
+        overlayRef.current = { scene, frame: end, timeline, t: null, credit: null, selectedSign: step === "signs" ? selectedSign : null, model, brightMap };
       } else {
-        const vp = { width: frame.w, height: frame.h };
         const f = frameAt(scene, model, timeline, Math.min(t, duration), vp);
-        // While building the route or placing signs, playback keeps the whole route in view with a
-        // little room around it, instead of running the camera move (that is previewed from Look on).
-        if (step === "route" || step === "signs") f.camera = fitView(model.path, vp, 0.08);
-        showFrame(map, scene, model, f, true);
+        // The map keeps the zoom and rotation the user left it at. Only the Camera and Preview & export
+        // steps run the camera move, and only while playing or scrubbing; leaving them puts the view back.
+        const runCamera = (step === "camera" || step === "export") && (playing || previewing);
+        if (runCamera && !savedView.current) {
+          const c = map.getCenter();
+          savedView.current = { center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() };
+        }
+        showFrame(map, scene, model, f, runCamera);
         overlayRef.current = { scene, frame: f, timeline, t: Math.min(t, duration), credit: project.output.credit ? creditFor(scene) : null, model, brightMap };
       }
       setOverlayKey((k) => k + 1);
@@ -210,7 +225,7 @@ function EditorLoaded({ initial }: { initial: Project }) {
     return () => {
       cancelled = true;
     };
-  }, [map, scene, model, timeline, t, duration, mode, rendering, frame.w, frame.h, selectedSign, step, project.output.credit, brightMap]);
+  }, [map, scene, model, timeline, t, duration, mode, rendering, frame.w, frame.h, selectedSign, step, project.output.credit, brightMap, playing, previewing]);
 
   // ---- playback
   useEffect(() => {
@@ -339,6 +354,35 @@ function EditorLoaded({ initial }: { initial: Project }) {
     const r = scene.route;
     if (i === 0) setRoute({ ...r, startTransport: tr, points: r.points.map((p, j) => (j === 0 ? { ...p, transport: undefined } : p)) });
     else patchPoint(i, { transport: tr });
+  };
+
+  /** A new leg from the end of the route, a short way on in the direction it was heading. */
+  const addLeg = () => {
+    const r = scene.route;
+    if (!map || r.kind !== "drawn" || !r.points.length) return;
+    const last = model?.points[model.points.length - 1] ?? r.points[r.points.length - 1].at;
+    const p = map.project(last);
+    let dx = 1;
+    let dy = 0;
+    if (model && model.path.length > 0) {
+      const b = chordBearing(model.path, Math.max(0, model.path.length * 0.97), model.path.length);
+      if (b !== null) {
+        const a = ((b - map.getBearing()) * Math.PI) / 180;
+        dx = Math.sin(a);
+        dy = -Math.cos(a);
+      }
+    }
+    const step = Math.min(160, Math.max(80, frame.w * 0.12));
+    const q = map.unproject([Math.min(frame.w - 30, Math.max(30, p.x + dx * step)), Math.min(frame.h - 30, Math.max(30, p.y + dy * step))]);
+    const current = lastTransport;
+    const next = TRANSPORT_IDS.find((id) => id !== current && id !== "arrow") ?? "car";
+    const pts = r.points.slice();
+    let startTransport = r.startTransport;
+    if (pts.length === 1) startTransport = next;
+    else pts[pts.length - 1] = { ...pts[pts.length - 1], transport: next };
+    pts.push({ at: [q.lng, q.lat] });
+    setRoute({ ...r, points: pts, startTransport });
+    setTravelBy(next);
   };
 
   const setLegTransport = (legIndex: number, tr: TransportId) => {
@@ -494,6 +538,10 @@ function EditorLoaded({ initial }: { initial: Project }) {
   // ---- layout
   const stepIdx = STEPS.findIndex((s) => s.id === step);
   const goStep = (s: Step) => {
+    if (savedView.current && s !== "camera" && s !== "export") {
+      map?.jumpTo(savedView.current);
+      savedView.current = null;
+    }
     setPlaying(false);
     setPreviewing(false);
     setPlacing(null);
@@ -623,11 +671,21 @@ function EditorLoaded({ initial }: { initial: Project }) {
               onImport={importGpx}
             />
           )}
-          {step === "look" && <LookPanel scene={scene} model={model} update={updateScene} focusTransport={focusTransport} />}
+          {step === "look" && <LookPanel scene={scene} model={model} update={updateScene} focusTransport={focusTransport} map={map} />}
           {step === "signs" && (
             <SignsPanel scene={scene} update={updateScene} placing={placing} setPlacing={setPlacing} selected={selectedSign} setSelected={setSelectedSign} onError={setNotice} />
           )}
-          {step === "camera" && <CameraPanel scene={scene} update={updateScene} map={map} onShowView={(v) => map?.jumpTo(v)} />}
+          {step === "camera" && (
+            <CameraPanel
+              scene={scene}
+              update={(fn) => {
+                updateScene(fn);
+                setPreviewing(true);
+              }}
+              map={map}
+              onShowView={(v) => map?.jumpTo(v)}
+            />
+          )}
           {step === "export" && (
             <ExportPanel
               project={project}
@@ -738,6 +796,7 @@ function EditorLoaded({ initial }: { initial: Project }) {
                     scene={scene}
                     model={model}
                     onChange={setLegTransport}
+                    onAddLeg={scene.route.kind === "drawn" && !playing ? addLeg : undefined}
                     onStyle={(tr) => {
                       setFocusTransport(tr);
                       goStep("look");
@@ -746,6 +805,7 @@ function EditorLoaded({ initial }: { initial: Project }) {
                 </Floating>
               ) : null
             )}
+            {!rendering && <MapControls map={map} />}
             {mode === "route-edit" && !rendering && scene.route.points.length === 0 && (
               <div className="getting-started">
                 <strong>Start here</strong>

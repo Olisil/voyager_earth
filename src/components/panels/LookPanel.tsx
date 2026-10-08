@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { ColorPicker, Field, Fold, Segmented, Slider, Toggle } from "../Controls";
-import { THEMES } from "../../lib/mapScene";
+import type { Map as MLMap } from "maplibre-gl";
+import { lookById, MAP_LOOKS, QUICK_LOOKS } from "../../lib/mapStyles";
+import { cachedThumb } from "../../lib/thumbnails";
+import { StyleModal } from "../StyleModal";
 import type { RouteModel } from "../../lib/model";
 import { TRANSPORT_IDS, TRANSPORTS, transportIcon } from "../../lib/transports";
 import type { Corner, Scene, TransportId, TransportStyle } from "../../lib/types";
@@ -10,10 +13,12 @@ export function LookPanel(props: {
   model: RouteModel | null;
   update: (fn: (s: Scene) => Scene) => void;
   focusTransport: TransportId | null;
+  map: MLMap | null;
 }) {
   const { scene, update } = props;
   const look = scene.look;
   const used = [...new Set(props.model?.legs.map((l) => l.transport) ?? [scene.route.startTransport])];
+  const [moreOpen, setMoreOpen] = useState(false);
   const [picked, setPicked] = useState<TransportId>(props.focusTransport ?? used[0] ?? "car");
   useEffect(() => {
     if (props.focusTransport) setPicked(props.focusTransport);
@@ -36,24 +41,37 @@ export function LookPanel(props: {
       </header>
 
       <Fold title="Map">
-        <div className="themes" role="radiogroup" aria-label="Map theme">
-          {THEMES.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="radio"
-              aria-checked={look.theme === t.id}
-              className={`theme${look.theme === t.id ? " on" : ""}`}
-              onClick={() => setLook({ theme: t.id })}
-            >
-              <span className="theme-swatch" style={{ background: t.swatch[0] }} aria-hidden>
-                <span style={{ background: t.swatch[1] }} />
-                <span style={{ background: t.swatch[2] }} />
-              </span>
-              {t.label}
-            </button>
-          ))}
+        <div className="themes" role="radiogroup" aria-label="Map look">
+          {[...QUICK_LOOKS, ...(QUICK_LOOKS.includes(look.theme) ? [] : [look.theme])].map((id) => {
+            const t = lookById(id);
+            const c = props.map?.getCenter();
+            const thumb = c ? cachedThumb(t, [c.lng, c.lat], Math.max(1, props.map!.getZoom() - 0.5)) : null;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="radio"
+                aria-checked={look.theme === t.id}
+                className={`theme${look.theme === t.id ? " on" : ""}`}
+                onClick={() => setLook({ theme: t.id })}
+              >
+                {thumb && !QUICK_LOOKS.includes(t.id) ? (
+                  <img className="theme-thumb" src={thumb} alt="" />
+                ) : (
+                  <span className="theme-swatch" style={{ background: t.swatch[0] }} aria-hidden>
+                    <span style={{ background: t.swatch[1] }} />
+                    <span style={{ background: t.swatch[2] }} />
+                  </span>
+                )}
+                {t.title}
+              </button>
+            );
+          })}
         </div>
+        <button type="button" className="btn btn-small btn-wide" onClick={() => setMoreOpen(true)}>
+          More map looks ({MAP_LOOKS.length})
+        </button>
+        {moreOpen && <StyleModal map={props.map} value={look.theme} onPick={(id) => setLook({ theme: id })} onClose={() => setMoreOpen(false)} />}
         <Field label="3D mountains">
           <Segmented
             label="3D mountains"

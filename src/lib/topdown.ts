@@ -58,6 +58,10 @@ const ICONS: Partial<Record<TransportId | "foot" | "wagon" | "loco", TopIcon>> =
     ],
   },
   // ---- new, same style ----
+  arrow: {
+    w: 12, h: 14, rotates: true,
+    parts: [["M6 0.8L11.2 13L6 10.2L0.8 13Z", "both"]],
+  },
   car: {
     w: 8, h: 16, rotates: true,
     parts: [

@@ -1,44 +1,12 @@
-import maplibregl, { type GeoJSONSource, type Map as MLMap, type StyleSpecification } from "maplibre-gl";
+import maplibregl, { type GeoJSONSource, type Map as MLMap } from "maplibre-gl";
 import mlcontour from "maplibre-contour";
+import { lookById } from "./mapStyles";
 import type { FrameState } from "./camera";
 import { pointAt, toLngLat, type Path } from "./geo";
 import type { RouteModel } from "./model";
 import type { LngLat, Scene, ThemeId } from "./types";
 
-export interface Theme {
-  id: ThemeId;
-  label: string;
-  /** land, water, road: used to draw the swatch */
-  swatch: [string, string, string];
-  style: string | StyleSpecification;
-}
-
-const satellite: StyleSpecification = {
-  version: 8,
-  sources: {
-    sat: {
-      type: "raster",
-      tiles: ["https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg"],
-      tileSize: 256,
-      maxzoom: 14,
-      attribution:
-        '<a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless</a> by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2016)',
-    },
-  },
-  layers: [
-    { id: "bg", type: "background", paint: { "background-color": "#0e2230" } },
-    { id: "sat", type: "raster", source: "sat" },
-  ],
-};
-
-export const THEMES: Theme[] = [
-  { id: "dark", label: "Dark", swatch: ["#1b1b1b", "#0b0b0b", "#3a3a3a"], style: "https://tiles.openfreemap.org/styles/dark" },
-  { id: "fiord", label: "Fiord", swatch: ["#45516e", "#38435c", "#7a8aa6"], style: "https://tiles.openfreemap.org/styles/fiord" },
-  { id: "positron", label: "Light", swatch: ["#f2f2f0", "#cfd8dc", "#b9b9b9"], style: "https://tiles.openfreemap.org/styles/positron" },
-  { id: "liberty", label: "Road atlas", swatch: ["#f8f4f0", "#a0c8f0", "#e9ac77"], style: "https://tiles.openfreemap.org/styles/liberty" },
-  { id: "bright", label: "Bright", swatch: ["#f8f4f0", "#a0c8f0", "#fdbf6f"], style: "https://tiles.openfreemap.org/styles/bright" },
-  { id: "satellite", label: "Satellite", swatch: ["#3e5a3a", "#16324a", "#a39572"], style: satellite },
-];
+export { MAP_LOOKS, QUICK_LOOKS, lookById } from "./mapStyles";
 
 const TERRAIN_TILES = "https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png";
 
@@ -58,8 +26,8 @@ function contourTiles(): string {
   });
 }
 
-/** Themes with a pale base map get inverted pointers. */
-export const BRIGHT_THEMES = new Set<ThemeId>(["positron", "liberty", "bright"]);
+/** Looks with a pale base map get inverted pointers. */
+export const isBrightLook = (id: string) => lookById(id).bright;
 
 export const SRC = { full: "fv-full", drawn: "fv-drawn", ctrl: "fv-ctrl", dem: "fv-dem", contours: "fv-contours-src" } as const;
 export const LYR = {
@@ -79,11 +47,11 @@ const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: 
 const currentTheme = new WeakMap<MLMap, ThemeId>();
 
 export function createMap(container: HTMLElement, scene: Scene): MLMap {
-  const theme = THEMES.find((t) => t.id === scene.look.theme) ?? THEMES[0];
+  const theme = lookById(scene.look.theme);
   const v = scene.view;
   const map = new maplibregl.Map({
     container,
-    style: theme.style,
+    style: theme.style(),
     center: v?.center ?? [18.07, 59.33],
     zoom: v?.zoom ?? 7,
     bearing: v?.bearing ?? 0,
@@ -243,7 +211,7 @@ export function ensureTheme(map: MLMap, scene: Scene): Promise<boolean> {
     applyLook(map, scene);
     return Promise.resolve(false);
   }
-  const theme = THEMES.find((t) => t.id === scene.look.theme) ?? THEMES[0];
+  const theme = lookById(scene.look.theme);
   currentTheme.set(map, theme.id);
   const promise = new Promise<boolean>((resolve) => {
     map.once("style.load", () => {
@@ -252,7 +220,7 @@ export function ensureTheme(map: MLMap, scene: Scene): Promise<boolean> {
       pending.delete(map);
       resolve(true);
     });
-    map.setStyle(theme.style, { diff: false });
+    map.setStyle(theme.style(), { diff: false });
   });
   pending.set(map, { theme: theme.id, promise });
   return promise;

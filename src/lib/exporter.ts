@@ -1,7 +1,7 @@
 import type { Map as MLMap } from "maplibre-gl";
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, canEncodeVideo, type VideoCodec } from "mediabunny";
 import { frameAt } from "./camera";
-import { BRIGHT_THEMES, ensureTheme, showFrame, waitForIdle } from "./mapScene";
+import { ensureTheme, isBrightLook, lookById, showFrame, waitForIdle } from "./mapScene";
 import { makeTimeline, type RouteModel } from "./model";
 import { cachedImage, drawOverlay, ensureFonts, preloadImages } from "./overlay";
 import { outputSize, type Project, type Scene } from "./types";
@@ -43,10 +43,7 @@ export async function pickCodec(width: number, height: number, fps: number): Pro
 }
 
 export function creditFor(scene: Scene): string {
-  const parts =
-    scene.look.theme === "satellite"
-      ? ["Sentinel-2 cloudless by EOX (Copernicus data 2016)"]
-      : ["© OpenStreetMap contributors", "OpenMapTiles", "OpenFreeMap"];
+  const parts = [lookById(scene.look.theme).credit];
   if (scene.look.terrain) parts.push("Mapzen terrain");
   return parts.join(", ");
 }
@@ -150,7 +147,7 @@ export async function renderVideo(opts: {
           image: (u) => cachedImage(u),
           model,
           zoom: map.getZoom(),
-          brightMap: BRIGHT_THEMES.has(scene.look.theme),
+          brightMap: isBrightLook(scene.look.theme),
         });
         await source.add(done / fps, 1 / fps);
         done++;
