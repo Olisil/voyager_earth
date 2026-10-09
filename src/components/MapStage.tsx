@@ -15,8 +15,11 @@ export type OverlayBase = Omit<OverlayInput, "toScreen" | "mapBearing" | "width"
 
 interface Props {
   scene: Scene;
+  /** size of the map (the whole stage, passe-partout included) */
   width: number;
   height: number;
+  /** where the video frame sits inside the map; overlay graphics are laid out in this rectangle */
+  frame: { x: number; y: number; w: number; h: number };
   interaction: Interaction;
   overlay: React.MutableRefObject<OverlayBase | null>;
   overlayKey: unknown;
@@ -50,7 +53,7 @@ export function MapStage(props: Props) {
     const map = mapRef.current;
     const c = canvas.current;
     if (!map || !c) return;
-    const { width, height } = latest.current;
+    const { width, height, frame } = latest.current;
     const dpr = DPR();
     if (c.width !== Math.round(width * dpr) || c.height !== Math.round(height * dpr)) {
       c.width = Math.round(width * dpr);
@@ -61,13 +64,18 @@ export function MapStage(props: Props) {
     g.clearRect(0, 0, c.width, c.height);
     const base = latest.current.overlay.current;
     if (!base) return;
+    // Signs, the travel symbol, compass and credit are placed in the video frame, not the whole map.
+    g.translate(frame.x * dpr, frame.y * dpr);
     hits.current = drawOverlay(g, {
       ...base,
-      toScreen: (ll) => map.project(ll),
+      toScreen: (ll) => {
+        const p = map.project(ll);
+        return { x: p.x - frame.x, y: p.y - frame.y };
+      },
       mapBearing: map.getBearing(),
       zoom: map.getZoom(),
-      width,
-      height,
+      width: frame.w,
+      height: frame.h,
       scale: dpr,
       image: (u) => cachedImage(u, () => redraw.current()),
     });
@@ -97,9 +105,11 @@ export function MapStage(props: Props) {
       return typeof i === "number" ? i : null;
     };
     const signAt = (e: MapMouseEvent): string | null => {
+      const x = e.point.x - latest.current.frame.x;
+      const y = e.point.y - latest.current.frame.y;
       for (let k = hits.current.length - 1; k >= 0; k--) {
         const h = hits.current[k];
-        if (e.point.x >= h.x && e.point.x <= h.x + h.w && e.point.y >= h.y && e.point.y <= h.y + h.h) return h.id;
+        if (x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h) return h.id;
       }
       return null;
     };
@@ -187,6 +197,38 @@ export function MapStage(props: Props) {
       latest.current.onViewChange({ center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() });
     };
 
+    // Middle mouse button: hold and drag to pan, in every mode (left button keeps drawing / placing).
+    const box = map.getCanvasContainer();
+    let mid: { x: number; y: number } | null = null;
+    const midMove = (e: MouseEvent) => {
+      if (!mid) return;
+      const dx = e.clientX - mid.x;
+      const dy = e.clientY - mid.y;
+      mid = { x: e.clientX, y: e.clientY };
+      if (dx || dy) map.panBy([-dx, -dy], { animate: false });
+    };
+    const midUp = (e: MouseEvent) => {
+      if (e.button !== 1 || !mid) return;
+      mid = null;
+      box.classList.remove("is-mid-panning");
+      window.removeEventListener("mousemove", midMove);
+      window.removeEventListener("mouseup", midUp);
+    };
+    const midDown = (e: MouseEvent) => {
+      if (e.button !== 1 || !map.dragPan.isEnabled()) return;
+      e.preventDefault(); // no browser auto-scroll
+      e.stopPropagation();
+      mid = { x: e.clientX, y: e.clientY };
+      box.classList.add("is-mid-panning");
+      window.addEventListener("mousemove", midMove);
+      window.addEventListener("mouseup", midUp);
+    };
+    const noAux = (e: MouseEvent) => {
+      if (e.button === 1) e.preventDefault();
+    };
+    box.addEventListener("mousedown", midDown, true);
+    box.addEventListener("auxclick", noAux);
+
     map.once("style.load", () => {
       installScene(map);
       map.on("mousedown", onDown);
@@ -199,6 +241,10 @@ export function MapStage(props: Props) {
       latest.current.onReady(map);
     });
     return () => {
+      box.removeEventListener("mousedown", midDown, true);
+      box.removeEventListener("auxclick", noAux);
+      window.removeEventListener("mousemove", midMove);
+      window.removeEventListener("mouseup", midUp);
       cancelAnimationFrame(raf);
       map.remove();
       mapRef.current = null;
@@ -217,7 +263,7 @@ export function MapStage(props: Props) {
   useEffect(() => {
     mapRef.current?.resize();
     redraw.current();
-  }, [props.width, props.height]);
+  }, [props.width, props.height, props.frame.x, props.frame.y, props.frame.w, props.frame.h]);
 
   useEffect(() => {
     redraw.current();

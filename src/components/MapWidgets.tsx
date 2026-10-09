@@ -7,7 +7,7 @@ import type { Scene, TransportId } from "../lib/types";
 
 // ---------- search ----------
 
-export function SearchBox({ map }: { map: MLMap | null }) {
+export function SearchBox({ map, padding = 40 }: { map: MLMap | null; padding?: number | { top: number; bottom: number; left: number; right: number } }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Place[]>([]);
@@ -61,7 +61,7 @@ export function SearchBox({ map }: { map: MLMap | null }) {
           [Math.min(a, c), Math.min(b, d)],
           [Math.max(a, c), Math.max(b, d)],
         ],
-        { padding: 40, maxZoom: 13, duration: 1200 },
+        { padding, maxZoom: 13, duration: 1200 },
       );
     } else map.flyTo({ center: p.at, zoom: p.zoom, duration: 1200 });
     setOpen(false);
@@ -128,6 +128,8 @@ export function LegsPanel(props: {
   onStyle: (t: TransportId) => void;
   /** adds a new leg after the last point; undefined hides the button (e.g. GPX tracks) */
   onAddLeg?: () => void;
+  /** removes a leg; undefined hides the delete buttons (e.g. GPX tracks) */
+  onRemoveLeg?: (legIndex: number) => void;
   /** seconds each leg takes to draw, and a way to set them */
   seconds: number[];
   onSeconds: (legIndex: number, seconds: number) => void;
@@ -163,6 +165,20 @@ export function LegsPanel(props: {
               </select>
               <span className="leg-km">{l.km < 10 ? l.km.toFixed(1) : Math.round(l.km).toLocaleString("en")} km</span>
               <LegSeconds value={props.seconds[l.index] ?? 0} label={`Leg ${l.index + 1} drawing time in seconds`} onChange={(v) => props.onSeconds(l.index, v)} />
+              {props.onRemoveLeg && (
+                <button type="button" className="leg-del" aria-label={`Delete leg ${l.index + 1}`} title="Delete leg" onClick={() => props.onRemoveLeg!(l.index)}>
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden>
+                    <path
+                      d="M2.5 4h11M6.5 4V2.75c0-.41.34-.75.75-.75h1.5c.41 0 .75.34.75.75V4M4 4l.6 8.7c.05.73.66 1.3 1.4 1.3h4c.74 0 1.35-.57 1.4-1.3L12 4M6.75 7v4M9.25 7v4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              )}
             </li>
           ))}
         </ol>

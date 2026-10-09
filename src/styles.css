@@ -2302,3 +2302,172 @@ select option {
 .transport.unused:not(.on) {
   opacity: 1;
 }
+
+/* ================= v6 ================= */
+/* Legs: a small delete button at the end of each row. */
+.legs {
+  width: 330px;
+}
+.legs li {
+  grid-template-columns: 26px 1fr auto auto 28px;
+}
+.leg-del {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius--medium);
+  background: transparent;
+  color: var(--text-placeholder);
+  cursor: pointer;
+  transition: color var(--ease), background-color var(--ease);
+}
+.leg-del:hover,
+.leg-del:focus-visible {
+  color: #d27272;
+  background: var(--bg-surface-muted);
+  outline: none;
+}
+html:not(.dark-mode) .leg-del:hover,
+html:not(.dark-mode) .leg-del:focus-visible {
+  color: var(--error);
+}
+
+/* Middle mouse button panning */
+.is-mid-panning,
+.is-mid-panning * {
+  cursor: grabbing !important;
+}
+
+/* Version, at the left of the step bar (above the side panel). */
+.app-version {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: center;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-placeholder);
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .app-version {
+    display: none;
+  }
+}
+
+/* Header, landscape mobile and down: the logo with the breadcrumb under it (Figma: Top navigation / Mobile). */
+@media (max-width: 767px) {
+  .topbar.app-header {
+    flex-wrap: nowrap;
+    height: var(--size--header-height);
+    padding: 0 var(--space--12);
+    gap: var(--space--12);
+  }
+  .app-header-start {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 1px;
+    min-width: 0;
+  }
+  .app-logo img {
+    width: 205px;
+  }
+  .breadcrumb {
+    max-width: 100%;
+  }
+  .app-header .project-name {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto;
+    height: 20px;
+    line-height: 20px;
+  }
+  .app-header .topbar-end {
+    flex: none;
+  }
+}
+@media (max-width: 479px) {
+  .app-logo img {
+    width: 170px;
+  }
+  .app-header .topbar-end {
+    gap: var(--space--8);
+  }
+}
+
+/* ================= v7 ================= */
+/* The map fills the stage. The video frame is a window in a grey passe-partout that dims the map
+   around it; floating panels sit on the stage and can live out in the passe-partout. */
+.stage-area {
+  display: block;
+  overflow: hidden;
+  --passe-partout: rgba(34, 35, 38, 0.62);
+  --frame-label: rgba(255, 255, 255, 0.82);
+}
+html:not(.dark-mode) .stage-area {
+  --passe-partout: rgba(96, 99, 106, 0.5);
+  --frame-label: rgba(255, 255, 255, 0.95);
+}
+.map-layer {
+  position: absolute;
+}
+.stage-area > .frame {
+  position: absolute;
+  z-index: 2;
+  overflow: visible;
+  background: none;
+  pointer-events: none;
+  outline: var(--stroke--hairline) solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 0 200vmax var(--passe-partout);
+}
+.stage-area > .frame.is-rendering {
+  outline: var(--stroke--default) solid var(--accent);
+}
+.frame-size {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  margin-bottom: 4px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.02em;
+  color: var(--frame-label);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+  user-select: none;
+}
+.stage-area > .frame .getting-started {
+  pointer-events: none;
+}
+.drop-veil {
+  z-index: 5;
+}
+
+.pos-legs {
+  top: 96px;
+}
+
+/* Narrow screens: the editor never gets wider than the window; the step bar scrolls sideways. */
+@media (max-width: 900px) {
+  .editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .editor > .steps {
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .editor > .steps::-webkit-scrollbar {
+    display: none;
+  }
+}
+@media (max-width: 767px) {
+  .app-header-start {
+    flex: 1 1 auto;
+  }
+}

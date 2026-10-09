@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 type Pos = { x: number; y: number };
-// v2: default places changed (legs top left, search top right), so older saved spots are dropped.
-const KEY = "voyager-earth:panels:v2";
+// v3: panels now live on the whole stage (passe-partout included), so older saved spots are dropped.
+const KEY = "voyager-earth:panels:v3";
 
 function load(id: string): Pos | null {
   try {

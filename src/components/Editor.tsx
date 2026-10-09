@@ -9,7 +9,7 @@ import { ensureTheme, isBrightLook, showEditing, showFrame } from "../lib/mapSce
 import { buildRouteModel, legSeconds, makeTimeline, type RouteModel } from "../lib/model";
 import { navigate } from "../router";
 import { ThemeToggle } from "../theme";
-import { ASPECTS, uid, type Aspect, type LngLat, type Project, type Route, type Scene, type SignStyle, type TransportId } from "../lib/types";
+import { ASPECTS, outputSize, uid, type Aspect, type LngLat, type Project, type Route, type Scene, type SignStyle, type TransportId } from "../lib/types";
 import { MapStage, type Interaction, type OverlayBase } from "./MapStage";
 import { LegsPanel, PointPopover, SearchBox } from "./MapWidgets";
 import { CameraPanel } from "./panels/CameraPanel";
@@ -100,6 +100,7 @@ function EditorLoaded({ initial }: { initial: Project }) {
   const [render, setRender] = useState<RenderState>({ status: "idle" });
   const [notice, setNotice] = useState<string | null>(null);
   const [frame, setFrame] = useState({ w: 0, h: 0 });
+  const [stage, setStage] = useState({ w: 0, h: 0 });
   const [dragOver, setDragOver] = useState(false);
   const [overlayKey, setOverlayKey] = useState(0);
   const [projectMenu, setProjectMenu] = useState(false);
@@ -160,10 +161,14 @@ function EditorLoaded({ initial }: { initial: Project }) {
     if (!el) return;
     const ratio = ASPECTS[project.output.aspect].ratio;
     const fit = () => {
-      const pad = window.innerWidth < 820 ? 10 : 24;
-      const aw = Math.max(100, el.clientWidth - pad * 2);
-      const ah = Math.max(100, el.clientHeight - pad * 2);
+      // Room around the frame for the passe-partout: the toolbar and size label sit above it.
+      const small = window.innerWidth < 820;
+      const padX = small ? 12 : 48;
+      const padY = small ? 84 : 80;
+      const aw = Math.max(100, el.clientWidth - padX * 2);
+      const ah = Math.max(100, el.clientHeight - padY * 2);
       const w = Math.min(aw, ah * ratio);
+      setStage({ w: el.clientWidth, h: el.clientHeight });
       setFrame({ w: Math.floor(w), h: Math.floor(w / ratio) });
     };
     fit();
@@ -172,15 +177,34 @@ function EditorLoaded({ initial }: { initial: Project }) {
     return () => ro.disconnect();
   }, [project.output.aspect]);
 
+  // ---- where the video frame sits
+  // The map fills the whole stage; the frame is centred in it and everything around it is dimmed
+  // (the passe-partout). While rendering, the map shrinks to exactly the frame.
+  const fx = Math.round((stage.w - frame.w) / 2);
+  const fy = Math.round((stage.h - frame.h) / 2);
+  const mapRect = rendering ? { x: fx, y: fy, w: frame.w, h: frame.h } : { x: 0, y: 0, w: stage.w, h: stage.h };
+  const frameInMap = rendering ? { x: 0, y: 0, w: frame.w, h: frame.h } : { x: fx, y: fy, w: frame.w, h: frame.h };
+  /** map padding that keeps a fit inside the video frame, plus a margin */
+  const framePadding = useCallback(
+    (margin: number) => ({
+      left: frameInMap.x + margin,
+      top: frameInMap.y + margin,
+      right: Math.max(0, mapRect.w - frameInMap.x - frameInMap.w) + margin,
+      bottom: Math.max(0, mapRect.h - frameInMap.y - frameInMap.h) + margin,
+    }),
+    [frameInMap.x, frameInMap.y, frameInMap.w, frameInMap.h, mapRect.w, mapRect.h],
+  );
+  const out = outputSize(project.output.aspect, project.output.resolution);
+
   // ---- map framing helpers
   const fitRoute = useCallback(
     (sc: Scene, animate = true) => {
       const b = boundsOf(modelFor(sc.route)?.points ?? sc.route.points.map((p) => p.at));
       if (!map || !b) return false;
-      map.fitBounds(b, { padding: Math.min(80, frame.w / 8), duration: animate ? 700 : 0, bearing: 0, pitch: 0, maxZoom: 13 });
+      map.fitBounds(b, { padding: framePadding(Math.min(80, frame.w / 8)), duration: animate ? 700 : 0, bearing: 0, pitch: 0, maxZoom: 13 });
       return true;
     },
-    [map, frame.w],
+    [map, frame.w, framePadding],
   );
 
   // When the scene changes (or the map first appears), go to where that scene was last edited.
@@ -373,7 +397,10 @@ function EditorLoaded({ initial }: { initial: Project }) {
       }
     }
     const step = Math.min(160, Math.max(80, frame.w * 0.12));
-    const q = map.unproject([Math.min(frame.w - 30, Math.max(30, p.x + dx * step)), Math.min(frame.h - 30, Math.max(30, p.y + dy * step))]);
+    const q = map.unproject([
+      Math.min(fx + frame.w - 30, Math.max(fx + 30, p.x + dx * step)),
+      Math.min(fy + frame.h - 30, Math.max(fy + 30, p.y + dy * step)),
+    ]);
     const current = lastTransport;
     const next = TRANSPORT_IDS.find((id) => id !== current && id !== "arrow") ?? "car";
     const pts = r.points.slice();
@@ -420,6 +447,42 @@ function EditorLoaded({ initial }: { initial: Project }) {
     setSelectedPoint(null);
   };
 
+  /** Delete one leg: its points go, the legs before and after keep their transport and timing. */
+  const removeLeg = (legIndex: number) => {
+    const r = scene.route;
+    if (!model || r.kind !== "drawn") return;
+    const leg = model.legs[legIndex];
+    if (!leg) return;
+    const n = model.legs.length;
+    const secs = legSeconds(model, scene)[legIndex] ?? 0;
+    let pts = r.points.slice();
+    let startTransport = r.startTransport;
+    if (n === 1) {
+      pts = [];
+    } else if (legIndex === 0) {
+      // the route now starts where the second leg starts
+      pts = pts.slice(leg.p1);
+      startTransport = pts[0].transport ?? model.legs[1].transport;
+      const { transport: _t, ...first } = pts[0];
+      pts[0] = first;
+    } else if (legIndex === n - 1) {
+      // the route now ends where this leg started
+      pts = pts.slice(0, leg.p0 + 1);
+      const { transport: _t, legSeconds: _s, ...end } = pts[leg.p0];
+      pts[leg.p0] = end;
+    } else {
+      // the next leg takes over from where this one started
+      const next = pts[leg.p1];
+      pts.splice(leg.p0 + 1, leg.p1 - leg.p0);
+      const at = pts[leg.p0];
+      const { legSeconds: _s, ...rest } = at;
+      pts[leg.p0] = { ...rest, transport: next.transport ?? model.legs[legIndex + 1].transport, ...(next.legSeconds !== undefined ? { legSeconds: next.legSeconds } : {}) };
+    }
+    setRoute({ ...r, points: pts, startTransport });
+    if (pts.length && secs > 0) updateScene((s) => ({ ...s, timing: { ...s.timing, duration: Math.max(0.5, Math.round((s.timing.duration - secs) * 10) / 10) } }));
+    setSelectedPoint(null);
+  };
+
   const reverseRoute = () => {
     const r = scene.route;
     if (!model) return;
@@ -445,8 +508,8 @@ function EditorLoaded({ initial }: { initial: Project }) {
       setPreviewing(false);
       const b = boundsOf(pts);
       if (map && b) {
-        map.fitBounds(b, { padding: Math.min(80, frame.w / 8), duration: 700, maxZoom: 13 });
-        const cam = map.cameraForBounds(b, { padding: 40 });
+        map.fitBounds(b, { padding: framePadding(Math.min(80, frame.w / 8)), duration: 700, maxZoom: 13 });
+        const cam = map.cameraForBounds(b, { padding: framePadding(40) });
         if (cam?.zoom !== undefined) {
           const z = Math.min(14, Math.round((cam.zoom + 2) * 10) / 10);
           updateScene((s) => ({ ...s, camera: { ...s.camera, zoom: z } }));
@@ -524,6 +587,9 @@ function EditorLoaded({ initial }: { initial: Project }) {
     setRender({ status: "rendering", frame: 0, frames: 1, elapsedMs: 0, scene: 1, scenes: scenes.length, paused: false });
     let lock: WakeLockSentinel | null = null;
     try {
+      // Let the map shrink to the frame (no passe-partout in the video) before the first capture.
+      await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+      map.resize();
       lock = (await navigator.wakeLock?.request("screen").catch(() => null)) ?? null;
       const res = await renderVideo({
         map,
@@ -642,6 +708,8 @@ function EditorLoaded({ initial }: { initial: Project }) {
         </div>
       </header>
 
+      <div className="app-version">Version {__APP_VERSION__}</div>
+
       <nav className="steps" aria-label="Steps">
         {STEPS.map((s, i) => (
           <button key={s.id} type="button" className={`step${step === s.id ? " on" : ""}${i < stepIdx ? " past" : ""}`} aria-current={step === s.id ? "step" : undefined} disabled={rendering} onClick={() => goStep(s.id)}>
@@ -722,12 +790,13 @@ function EditorLoaded({ initial }: { initial: Project }) {
 
       <main className="stage">
         <div className="stage-area" ref={stageRef}>
-          <div className={`frame${rendering ? " is-rendering" : ""}`} style={{ width: frame.w, height: frame.h }}>
-            {frame.w > 0 && (
+          {frame.w > 0 && stage.w > 0 && (
+            <div className="map-layer" style={{ left: mapRect.x, top: mapRect.y, width: mapRect.w, height: mapRect.h }}>
               <MapStage
                 scene={scene}
-                width={frame.w}
-                height={frame.h}
+                width={mapRect.w}
+                height={mapRect.h}
+                frame={frameInMap}
                 interaction={interaction}
                 overlay={overlayRef}
                 overlayKey={overlayKey}
@@ -748,33 +817,49 @@ function EditorLoaded({ initial }: { initial: Project }) {
                   if (selectedPoint === null || mode !== "route-edit" || !scene.route.points[selectedPoint]) return null;
                   const at = toScreen(model?.points[selectedPoint] ?? scene.route.points[selectedPoint].at);
                   return (
-                  <Floating
-                    key={selectedPoint}
-                    id="popover"
-                    persist={false}
-                    className="pos-popover"
-                    bounds={{ w: frame.w, h: frame.h }}
-                    anchorStyle={{ left: at.x, top: at.y, transform: at.y < 300 ? "translate(-50%, 16px)" : "translate(-50%, calc(-100% - 16px))" }}
-                  >
-                    <PointPopover
-                      scene={scene}
-                      index={selectedPoint}
-                      at={toScreen(model?.points[selectedPoint] ?? scene.route.points[selectedPoint].at)}
-                      currentTransport={pointTransport(selectedPoint)}
-                      onTransport={(tr) => setTransportFrom(selectedPoint, tr)}
-                      onPause={(s) => patchPoint(selectedPoint, { pause: s || undefined })}
-                      onSharp={(v) => patchPoint(selectedPoint, { sharp: v || undefined })}
-                      onRemove={() => removePoint(selectedPoint)}
-                      onClose={() => setSelectedPoint(null)}
-                    />
-                  </Floating>
+                    <Floating
+                      key={selectedPoint}
+                      id="popover"
+                      persist={false}
+                      className="pos-popover"
+                      bounds={{ w: mapRect.w, h: mapRect.h }}
+                      anchorStyle={{ left: at.x, top: at.y, transform: at.y < 300 ? "translate(-50%, 16px)" : "translate(-50%, calc(-100% - 16px))" }}
+                    >
+                      <PointPopover
+                        scene={scene}
+                        index={selectedPoint}
+                        at={at}
+                        currentTransport={pointTransport(selectedPoint)}
+                        onTransport={(tr) => setTransportFrom(selectedPoint, tr)}
+                        onPause={(s) => patchPoint(selectedPoint, { pause: s || undefined })}
+                        onSharp={(v) => patchPoint(selectedPoint, { sharp: v || undefined })}
+                        onRemove={() => removePoint(selectedPoint)}
+                        onClose={() => setSelectedPoint(null)}
+                      />
+                    </Floating>
                   );
                 }}
               </MapStage>
-            )}
+            </div>
+          )}
 
-            {mode === "route-edit" && !rendering && (
-              <Floating id="toolbar" className="pos-toolbar" bounds={{ w: frame.w, h: frame.h }}>
+          {/* The video frame: a window in the passe-partout, with its format and pixel size above it. */}
+          {frame.w > 0 && (
+            <div className={`frame${rendering ? " is-rendering" : ""}`} style={{ left: fx, top: fy, width: frame.w, height: frame.h }}>
+              <div className="frame-size" aria-label={`Video size ${project.output.aspect}, ${out.width} by ${out.height} pixels`}>
+                {project.output.aspect} · {out.width}×{out.height}
+              </div>
+              {mode === "route-edit" && !rendering && scene.route.points.length === 0 && (
+                <div className="getting-started">
+                  <strong>Start here</strong>
+                  <span>Search for a place, then click the map to drop the first point of your route. Or drop a GPX file on the page.</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {mode === "route-edit" && !rendering && (
+            <Floating id="toolbar" className="pos-toolbar" bounds={stage}>
               <div className="map-toolbar">
                 {scene.route.kind === "drawn" && (
                   <Segmented
@@ -794,39 +879,31 @@ function EditorLoaded({ initial }: { initial: Project }) {
                   Undo
                 </button>
               </div>
-              </Floating>
-            )}
-            {!rendering && (
-              <Floating id="search" className="pos-search" bounds={{ w: frame.w, h: frame.h }}>
-                <SearchBox map={map} />
-              </Floating>
-            )}
-            {step === "route" && !playing && !rendering && (
-              model && model.legs.length > 0 ? (
-                <Floating id="legs" className="pos-legs" bounds={{ w: frame.w, h: frame.h }}>
-                  <LegsPanel
-                    scene={scene}
-                    model={model}
-                    onChange={setLegTransport}
-                    onAddLeg={scene.route.kind === "drawn" && !playing ? addLeg : undefined}
-                    seconds={model ? legSeconds(model, scene) : []}
-                    onSeconds={setLegSecondsFor}
-                    onStyle={(tr) => {
-                      setFocusTransport(tr);
-                      goStep("look");
-                    }}
-                  />
-                </Floating>
-              ) : null
-            )}
-            {!rendering && <MapControls map={map} />}
-            {mode === "route-edit" && !rendering && scene.route.points.length === 0 && (
-              <div className="getting-started">
-                <strong>Start here</strong>
-                <span>Search for a place, then click the map to drop the first point of your route. Or drop a GPX file on the page.</span>
-              </div>
-            )}
-          </div>
+            </Floating>
+          )}
+          {!rendering && (
+            <Floating id="search" className="pos-search" bounds={stage}>
+              <SearchBox map={map} padding={framePadding(40)} />
+            </Floating>
+          )}
+          {step === "route" && !playing && !rendering && model && model.legs.length > 0 && (
+            <Floating id="legs" className="pos-legs" bounds={stage}>
+              <LegsPanel
+                scene={scene}
+                model={model}
+                onChange={setLegTransport}
+                onAddLeg={scene.route.kind === "drawn" && !playing ? addLeg : undefined}
+                onRemoveLeg={scene.route.kind === "drawn" && !playing ? removeLeg : undefined}
+                seconds={model ? legSeconds(model, scene) : []}
+                onSeconds={setLegSecondsFor}
+                onStyle={(tr) => {
+                  setFocusTransport(tr);
+                  goStep("look");
+                }}
+              />
+            </Floating>
+          )}
+          {!rendering && <MapControls map={map} />}
           {dragOver && <div className="drop-veil">Drop a GPX track or a project file</div>}
         </div>
 
