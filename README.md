@@ -29,16 +29,32 @@ Plain Vite + React, which Webflow Cloud builds directly (`webflow.json` pins `vi
 site's "Base" collection): `--color--*` light values, `--dark--*` dark values, `--space--*`,
 `--size--*`, `--stroke--*`, `--radius--*`, `--headings`, `--persist-*`. As on the site, the class
 `dark-mode` on `<html>` swaps them, and the choice is shared with the rest of nassau.se through
-`localStorage["dark-mode"]` (dark by default). The header uses the site's logo file and the
-same `toggle_wrap` theme toggle. Fonts are the site's own (Neugrotypeface, Raleway variable)
-from the Webflow CDN, with a bundled Raleway as fallback for local development.
+`localStorage["dark-mode"]` (dark by default). Fonts are the site's own (Neugrotypeface,
+Raleway variable) from the Webflow CDN, with a bundled Raleway as fallback for local development.
+
+The header is the site's floating navigation plate: the Voyager Earth logo and a breadcrumb on
+the left; on the right "Buy me a coffee", "Apps home" and the site's `toggle_wrap` theme toggle.
+The plate is always dark, so its controls keep their dark-mode colours in light mode too.
+
+- **Buy me a coffee** is the button from nassau.se/apps (Button Secondary with the Buy Me a
+  Coffee logo, signal green with the coffee in Signal On). A click opens the same support panel
+  as on the Apps page (`lib/support.ts` and the `.nx-bmc` styles are copied from the page's
+  custom code); with a modifier key the link opens buymeacoffee.com/nassau in a new tab. Below
+  1000 px wide the button shows the cup only.
+- **Apps home** is a nav link like the site's main navigation (`.nav-text-link`: Raleway 600,
+  16 px, bright text, signal green on hover) and goes to `/apps` on the same site. On phones it
+  reads "Apps".
+- The **project menu** (download or duplicate) is the icon button left of the video shape
+  select in the step bar.
 
 Components follow the "Nassau New" Figma design system:
 
 | Figma component | Used for | Class |
 | --- | --- | --- |
 | Button / Primary | Next step, Render video, Download MP4, Create project, Play | `.btn.btn-primary` |
-| Button / Secondary | Open a project file, New scene, Project menu | `.btn.btn-secondary` |
+| Button / Secondary | Open a project file, New scene | `.btn.btn-secondary` |
+| Button / Secondary (Apps page) | Buy me a coffee, in the header | `.bmc-button` |
+| Nav link (site navigation) | Apps home, in the header | `.nav-text-link` |
 | Button Tool / Secondary | Detailed controls: Undo, Reverse, Use this view, Duplicate | `.btn` |
 | Button Tool / Primary | Chosen option in segmented controls, active tool, chosen transport | `.segmented .on` |
 | Nav link | The current step | `.step.on` |
@@ -65,6 +81,8 @@ export them with Webflow DevLink.
 - `lib/exporter.ts`: renders one or all scenes and encodes MP4; pauses while the tab is hidden
 - `lib/db.ts`: IndexedDB projects and project files
 - `lib/geocode.ts`: place search (Photon / OpenStreetMap)
+- `lib/support.ts`: the Buy me a coffee support panel (same as on nassau.se/apps)
+- `components/HeaderNav.tsx`: Buy me a coffee and Apps home, shared by both headers
 
 ## Data sources and licences
 

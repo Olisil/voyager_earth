@@ -18,6 +18,7 @@ import { LookPanel } from "./panels/LookPanel";
 import { RoutePanel } from "./panels/RoutePanel";
 import { SignsPanel } from "./panels/SignsPanel";
 import { Floating } from "./Floating";
+import { HeaderNav } from "./HeaderNav";
 import { MapControls } from "./MapControls";
 import logoUrl from "../assets/voyager-earth-logo.svg";
 import { Segmented } from "./Controls";
@@ -103,13 +104,37 @@ function EditorLoaded({ initial }: { initial: Project }) {
   const [stage, setStage] = useState({ w: 0, h: 0 });
   const [dragOver, setDragOver] = useState(false);
   const [overlayKey, setOverlayKey] = useState(0);
-  const [projectMenu, setProjectMenu] = useState(false);
+  // The project menu (download or duplicate) opens below its button in the step bar.
+  const [projectMenu, setProjectMenu] = useState<{ top: number; right: number } | null>(null);
 
   const stageRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const overlayRef = useRef<OverlayBase | null>(null);
   const projectRef = useRef(project);
   projectRef.current = project;
+
+  // The project menu closes on a click outside it, on Escape, and when the window resizes or
+  // anything scrolls (it is placed in window coordinates, below its button).
+  useEffect(() => {
+    if (!projectMenu) return;
+    const outside = (e: PointerEvent) => {
+      if (!(e.target as Element).closest(".project-menu, .project-menu-button")) setProjectMenu(null);
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setProjectMenu(null);
+    };
+    const away = () => setProjectMenu(null);
+    window.addEventListener("pointerdown", outside);
+    window.addEventListener("keydown", key);
+    window.addEventListener("resize", away);
+    window.addEventListener("scroll", away, true);
+    return () => {
+      window.removeEventListener("pointerdown", outside);
+      window.removeEventListener("keydown", key);
+      window.removeEventListener("resize", away);
+      window.removeEventListener("scroll", away, true);
+    };
+  }, [projectMenu]);
 
   const scene = project.scenes[Math.min(sceneIdx, project.scenes.length - 1)];
   const model = modelFor(scene.route);
@@ -668,42 +693,7 @@ function EditorLoaded({ initial }: { initial: Project }) {
           </nav>
         </div>
         <div className="topbar-end">
-          <div className="menu-wrap">
-            <button
-              type="button"
-              className={`icon-button${projectMenu ? " is-active" : ""}`}
-              aria-label="Project: download or duplicate"
-              title="Project"
-              aria-haspopup="menu"
-              aria-expanded={projectMenu}
-              onClick={() => setProjectMenu(!projectMenu)}
-            >
-              <svg viewBox="0 0 18 16" width="24" height="22" aria-hidden>
-                <path
-                  fill="currentColor"
-                  d="M12.5 7.98V6.5c0-.28-.23-.5-.5-.5H9.05C7.46 6 6.11 7.05 5.66 8.49 5.56 8.19 5.5 7.87 5.5 7.5 5.5 5.57 7.07 4 9 4h3c.28 0 .5-.22.5-.5V2.02L15.81 5 12.5 7.98ZM10.5 7.5H11V9c0 .55.45 1 1 1h.12c.25 0 .48-.09.67-.26l4.34-3.91c.24-.21.37-.51.37-.83s-.13-.62-.37-.83L12.81.28A1.08 1.08 0 0 0 11 1.08V2.5H9C6.24 2.5 4 4.74 4 7.5c0 1.89 1.08 3.1 2 3.78.18.14.36.25.52.35.14.08.27.15.37.21.1.05.19.09.26.12.07.03.14.04.22.04h.08c.31 0 .56-.25.56-.56 0-.24-.17-.46-.36-.61l-.04-.03a1.4 1.4 0 0 1-.31-.3 1.97 1.97 0 0 1-.43-1.26c0-1.13.92-2.05 2.05-2.05h1.45L10.5 7.5ZM2.25 1A2.25 2.25 0 0 0 0 3.25v10.5C0 14.99 1.01 16 2.25 16h10.5c1.24 0 2.25-1.01 2.25-2.25v-2a.75.75 0 0 0-1.5 0v2c0 .42-.33.75-.75.75H2.25a.75.75 0 0 1-.75-.75V3.25c0-.42.33-.75.75-.75h2a.75.75 0 0 0 0-1.5h-2Z"
-                />
-              </svg>
-            </button>
-            {projectMenu && (
-              <div className="menu menu-right" role="menu" onMouseLeave={() => setProjectMenu(false)}>
-                <button type="button" role="menuitem" onClick={() => (setProjectMenu(false), downloadProjectFile(project))}>
-                  Download project file
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={async () => {
-                    setProjectMenu(false);
-                    const copy = await duplicateProject(project);
-                    navigate(`/p/${copy.id}`);
-                  }}
-                >
-                  Duplicate project
-                </button>
-              </div>
-            )}
-          </div>
+          <HeaderNav />
           <ThemeToggle />
         </div>
       </header>
@@ -717,19 +707,61 @@ function EditorLoaded({ initial }: { initial: Project }) {
             {s.label}
           </button>
         ))}
-        <select
-          className="aspect-select"
-          aria-label="Video shape"
-          value={project.output.aspect}
-          disabled={rendering}
-          onChange={(e) => updateProject((p) => ({ ...p, output: { ...p.output, aspect: e.target.value as Aspect } }))}
-        >
-          {(Object.keys(ASPECTS) as Aspect[]).map((a) => (
-            <option key={a} value={a}>
-              {ASPECTS[a].label}
-            </option>
-          ))}
-        </select>
+        <div className="steps-end">
+          <button
+            type="button"
+            className={`icon-button project-menu-button${projectMenu ? " is-active" : ""}`}
+            aria-label="Project: download or duplicate"
+            title="Project"
+            aria-haspopup="menu"
+            aria-expanded={!!projectMenu}
+            onClick={(e) => {
+              if (projectMenu) return setProjectMenu(null);
+              // Right-aligned under the button, kept inside the window (the step bar scrolls on phones).
+              const r = e.currentTarget.getBoundingClientRect();
+              const vw = document.documentElement.clientWidth;
+              setProjectMenu({ top: r.bottom + 4, right: Math.max(8, Math.min(vw - r.right, vw - 198)) });
+            }}
+          >
+            <svg viewBox="0 0 18 16" width="24" height="22" aria-hidden>
+              <path
+                fill="currentColor"
+                d="M12.5 7.98V6.5c0-.28-.23-.5-.5-.5H9.05C7.46 6 6.11 7.05 5.66 8.49 5.56 8.19 5.5 7.87 5.5 7.5 5.5 5.57 7.07 4 9 4h3c.28 0 .5-.22.5-.5V2.02L15.81 5 12.5 7.98ZM10.5 7.5H11V9c0 .55.45 1 1 1h.12c.25 0 .48-.09.67-.26l4.34-3.91c.24-.21.37-.51.37-.83s-.13-.62-.37-.83L12.81.28A1.08 1.08 0 0 0 11 1.08V2.5H9C6.24 2.5 4 4.74 4 7.5c0 1.89 1.08 3.1 2 3.78.18.14.36.25.52.35.14.08.27.15.37.21.1.05.19.09.26.12.07.03.14.04.22.04h.08c.31 0 .56-.25.56-.56 0-.24-.17-.46-.36-.61l-.04-.03a1.4 1.4 0 0 1-.31-.3 1.97 1.97 0 0 1-.43-1.26c0-1.13.92-2.05 2.05-2.05h1.45L10.5 7.5ZM2.25 1A2.25 2.25 0 0 0 0 3.25v10.5C0 14.99 1.01 16 2.25 16h10.5c1.24 0 2.25-1.01 2.25-2.25v-2a.75.75 0 0 0-1.5 0v2c0 .42-.33.75-.75.75H2.25a.75.75 0 0 1-.75-.75V3.25c0-.42.33-.75.75-.75h2a.75.75 0 0 0 0-1.5h-2Z"
+              />
+            </svg>
+          </button>
+          {projectMenu && (
+            <div className="menu project-menu" role="menu" style={{ top: projectMenu.top, right: projectMenu.right }} onMouseLeave={() => setProjectMenu(null)}>
+              <button type="button" role="menuitem" onClick={() => (setProjectMenu(null), downloadProjectFile(project))}>
+                Download project file
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={async () => {
+                  setProjectMenu(null);
+                  const copy = await duplicateProject(project);
+                  navigate(`/p/${copy.id}`);
+                }}
+              >
+                Duplicate project
+              </button>
+            </div>
+          )}
+          <select
+            className="aspect-select"
+            aria-label="Video shape"
+            value={project.output.aspect}
+            disabled={rendering}
+            onChange={(e) => updateProject((p) => ({ ...p, output: { ...p.output, aspect: e.target.value as Aspect } }))}
+          >
+            {(Object.keys(ASPECTS) as Aspect[]).map((a) => (
+              <option key={a} value={a}>
+                {ASPECTS[a].label}
+              </option>
+            ))}
+          </select>
+        </div>
       </nav>
 
       <aside className="panel">

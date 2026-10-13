@@ -6,6 +6,7 @@ import { navigate } from "../router";
 import { ThemeToggle } from "../theme";
 import logoUrl from "../assets/voyager-earth-logo.svg";
 import { demoProject, newProject, type Project } from "../lib/types";
+import { HeaderNav } from "./HeaderNav";
 
 function ago(ts: number) {
   const s = Math.round((Date.now() - ts) / 1000);
@@ -117,6 +118,7 @@ export function Home() {
           </nav>
         </div>
         <div className="topbar-end">
+          <HeaderNav />
           <ThemeToggle />
         </div>
       </header>
