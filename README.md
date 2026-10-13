@@ -33,7 +33,7 @@ site's "Base" collection): `--color--*` light values, `--dark--*` dark values, `
 Raleway variable) from the Webflow CDN, with a bundled Raleway as fallback for local development.
 
 The header is the site's floating navigation plate: the Voyager Earth logo and a breadcrumb on
-the left; on the right "Buy me a coffee", "Apps home" and the site's `toggle_wrap` theme toggle.
+the left; on the right "Apps home", "Buy me a coffee" and the site's `toggle_wrap` theme toggle.
 The plate is always dark, so its controls keep their dark-mode colours in light mode too.
 
 - **Buy me a coffee** is the button from nassau.se/apps (Button Secondary with the Buy Me a
