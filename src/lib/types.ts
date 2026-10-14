@@ -10,6 +10,18 @@ export type Aspect = "16:9" | "9:16" | "1:1" | "4:5";
 export type Resolution = 1080 | 1440 | 2160;
 export type Fps = 24 | 25 | 30 | 60;
 export type Corner = "tl" | "tr" | "bl" | "br";
+export type StartMarker = "none" | "cross";
+export type FinishMarker = "none" | "cross" | "flag";
+
+/** Marks on the route itself: where it starts and ends, and what each leg travelled by. */
+export interface Markers {
+  start: StartMarker;
+  finish: FinishMarker;
+  /** the finish mark is there from the start, instead of popping up when the line arrives */
+  finishFromStart: boolean;
+  /** a round transport icon in the middle of each leg, popping up when the leg is done */
+  legIcons: boolean;
+}
 
 export interface SavedView {
   center: LngLat;
@@ -75,6 +87,7 @@ export interface Scene {
     symbolScale: number;
     transports: Record<TransportId, TransportStyle>;
     compass: { on: boolean; corner: Corner; style: "needle" | "rose"; size: number };
+    markers: Markers;
   };
   signs: Sign[];
   signScale: number;
@@ -148,6 +161,10 @@ export function defaultTransportStyles(): Record<TransportId, TransportStyle> {
   ) as Record<TransportId, TransportStyle>;
 }
 
+export function defaultMarkers(): Markers {
+  return { start: "none", finish: "none", finishFromStart: false, legIcons: false };
+}
+
 export function newScene(name = "Scene 1", lookFrom?: Scene): Scene {
   return {
     id: uid(),
@@ -165,6 +182,7 @@ export function newScene(name = "Scene 1", lookFrom?: Scene): Scene {
           symbolScale: 1,
           transports: defaultTransportStyles(),
           compass: { on: false, corner: "tr", style: "needle", size: 1 },
+          markers: defaultMarkers(),
         },
     signs: [],
     signScale: lookFrom?.signScale ?? 1,
@@ -239,6 +257,7 @@ function coerceScene(raw: Partial<Scene>, i: number): Scene {
     look.transports[id] = t;
   }
   look.compass = { ...base.look.compass, ...raw.look?.compass };
+  look.markers = { ...defaultMarkers(), ...raw.look?.markers };
   return {
     ...base,
     ...raw,

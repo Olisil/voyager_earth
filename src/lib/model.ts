@@ -243,6 +243,14 @@ export function makeTimeline(model: RouteModel | null, scene: Scene, output: Pro
   };
 }
 
+/** Seconds into the scene when the line reaches arc length `s` (pauses before it included). */
+export function timeAtS(tl: Timeline, s: number, easing: Scene["timing"]["easing"]): number {
+  if (!tl.legs.length || tl.W <= 0) return tl.holdStart;
+  const u = tl.D * easeInv(wFromS(tl.legs, s) / tl.W, easing === "ease");
+  const before = tl.pauses.filter((p) => p.u < u - 1e-9).reduce((a, p) => a + p.seconds, 0);
+  return tl.holdStart + u + before;
+}
+
 export function timeState(model: RouteModel, tl: Timeline, t: number, easing: Scene["timing"]["easing"]): TimeState {
   let u = t - tl.holdStart;
   let paused = false;

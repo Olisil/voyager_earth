@@ -7,7 +7,7 @@ import { cachedThumb } from "../../lib/thumbnails";
 import { StyleModal } from "../StyleModal";
 import type { RouteModel } from "../../lib/model";
 import { TRANSPORT_IDS, TRANSPORTS, transportIcon } from "../../lib/transports";
-import type { Corner, Scene, TransportId, TransportStyle } from "../../lib/types";
+import type { Corner, FinishMarker, Markers, Scene, StartMarker, TransportId, TransportStyle } from "../../lib/types";
 
 export function LookPanel(props: {
   scene: Scene;
@@ -31,6 +31,9 @@ export function LookPanel(props: {
   const setStyle = (st: Partial<TransportStyle>) =>
     update((s) => ({ ...s, look: { ...s.look, transports: { ...s.look.transports, [picked]: { ...s.look.transports[picked], ...st } } } }));
   const setCompass = (c: Partial<Scene["look"]["compass"]>) => setLook({ compass: { ...look.compass, ...c } });
+  const markers = look.markers;
+  const setMarkers = (m: Partial<Markers>) => setLook({ markers: { ...markers, ...m } });
+  const marked = markers.start !== "none" || markers.finish !== "none" || markers.legIcons;
 
 
   return (
@@ -170,6 +173,47 @@ export function LookPanel(props: {
         <Slider label="Symbol size" value={look.symbolScale} min={0.6} max={2} step={0.05} format={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setLook({ symbolScale: v })} />
         <Toggle label="White outline" hint="A thin white edge around the line." checked={look.outline} onChange={(v) => setLook({ outline: v })} />
         <Toggle label="Show the way ahead" hint="A faint dashed line for the part not travelled yet." checked={look.showAhead} onChange={(v) => setLook({ showAhead: v })} />
+      </Fold>
+
+      <Fold title="Start, finish and legs" defaultOpen={marked}>
+        <Field label="Start">
+          <Segmented<StartMarker>
+            label="Start mark"
+            value={markers.start}
+            options={[
+              { value: "none", label: "None" },
+              { value: "cross", label: "Cross" },
+            ]}
+            onChange={(v) => setMarkers({ start: v })}
+          />
+        </Field>
+        <Field label="Finish">
+          <Segmented<FinishMarker>
+            label="Finish mark"
+            value={markers.finish}
+            options={[
+              { value: "none", label: "None" },
+              { value: "cross", label: "Cross" },
+              { value: "flag", label: "Chequered flag" },
+            ]}
+            onChange={(v) => setMarkers({ finish: v })}
+          />
+        </Field>
+        {markers.finish !== "none" && (
+          <Toggle
+            label="Show the finish from the start"
+            hint="Off: it pops up when the line arrives."
+            checked={markers.finishFromStart}
+            onChange={(v) => setMarkers({ finishFromStart: v })}
+          />
+        )}
+        <Toggle
+          label="Transport icons on the legs"
+          hint="A round icon in the middle of each leg, popping up as soon as that leg is done."
+          checked={markers.legIcons}
+          onChange={(v) => setMarkers({ legIcons: v })}
+        />
+        <p className="hint">The crosses take the colour of the line. Marks follow the symbol size.</p>
       </Fold>
 
       <Fold title="Extras" defaultOpen={look.compass.on}>

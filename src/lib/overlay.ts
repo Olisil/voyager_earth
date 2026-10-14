@@ -1,9 +1,10 @@
 import type { FrameState } from "./camera";
 import { pointAt, toLngLat } from "./geo";
-import type { RouteModel, Timeline } from "./model";
+import { timeAtS, type RouteModel, type Timeline } from "./model";
 import { drawTopIcon, inkFor, topIcon } from "./topdown";
 import { lineColor } from "./colors";
-import type { LngLat, Scene, Sign } from "./types";
+import { TRANSPORTS } from "./transports";
+import type { LngLat, Scene, Sign, TransportId } from "./types";
 
 export const FONT_HEAD = '"Neugrotypeface", "Raleway Variablefont Wght", "Raleway Variable", sans-serif';
 export const FONT_BODY = '"Raleway Variablefont Wght", "Raleway Variable", system-ui, sans-serif';
@@ -132,7 +133,8 @@ function drawSymbol(g: CanvasRenderingContext2D, o: OverlayInput) {
 /**
  * Top-down pointers. 1 design px = 2 screen px at 100 % symbol size.
  * Train: locomotive at the tip, two wagons following the line behind it.
- * Walk: footprints left on the line, alternating feet, older steps fading out.
+ * Walk: footprints left along the line, left and right feet a little apart and turned slightly
+ * outwards, the older steps fading out.
  * Balloon: stays upright and bobs gently.
  */
 function drawTopDown(g: CanvasRenderingContext2D, o: OverlayInput, p: { x: number; y: number }, heading: number, k: number) {
@@ -144,12 +146,13 @@ function drawTopDown(g: CanvasRenderingContext2D, o: OverlayInput, p: { x: numbe
     g.shadowBlur = 4;
     g.shadowOffsetY = 1;
   };
-  const at = (x: number, y: number, h: number, id: Parameters<typeof topIcon>[0], alpha = 1) => {
+  const at = (x: number, y: number, h: number, id: Parameters<typeof topIcon>[0], alpha = 1, mirror = false) => {
     const icon = topIcon(id);
     if (!icon) return;
     g.save();
     g.translate(x, y);
     if (icon.rotates) g.rotate(h);
+    if (mirror) g.scale(-1, 1);
     shadow();
     drawTopIcon(g, icon, scale, ink, alpha);
     g.restore();
@@ -171,21 +174,25 @@ function drawTopDown(g: CanvasRenderingContext2D, o: OverlayInput, p: { x: numbe
   }
 
   if (t === "walk") {
+    // The print is a left shoe. Steps are about one and a half shoe lengths apart along the line,
+    // and the feet sit a shoe width apart across it, so prints never touch.
     const foot = topIcon("foot")!;
-    const step = foot.h * 0.9 * scale;
+    const step = foot.h * 1.45 * scale;
+    const side = foot.w * 0.6 * scale;
+    const toeOut = 0.12;
     const zoomScale = o.zoom !== undefined ? 512 * Math.pow(2, o.zoom) : 0;
     const walked = f.s * zoomScale;
     const last = Math.floor(walked / step);
-    const side = 1.6 * scale;
     for (let n = 3; n >= 0; n--) {
       const i = last - n;
       if (i < 0) continue;
       const b = behind(o, walked - i * step);
       if (!b) continue;
-      const off = i % 2 === 0 ? -side : side;
+      const left = i % 2 === 0;
+      const off = left ? -side : side;
       const x = b.x + Math.cos(b.heading) * off;
       const y = b.y + Math.sin(b.heading) * off;
-      at(x, y, b.heading, "foot", [1, 0.7, 0.45, 0.2][n]);
+      at(x, y, b.heading + (left ? -toeOut : toeOut), "foot", [1, 0.7, 0.45, 0.2][n], !left);
     }
     if (last < 0 || !o.model) at(p.x, p.y, heading, "foot");
     return;
@@ -198,6 +205,143 @@ function drawTopDown(g: CanvasRenderingContext2D, o: OverlayInput, p: { x: numbe
   }
 
   at(p.x, p.y, heading, t);
+}
+
+// ---------- route markers: start, finish, transport per leg ----------
+
+/** How far a mark has popped up (0..1): it appears at `when` seconds and settles in half a second. */
+function popAmount(o: OverlayInput, when: number | null): number {
+  if (o.t === null || when === null) return 1;
+  if (o.t < when) return 0;
+  return Math.min(1, (o.t - when) / 0.5);
+}
+
+function withPop(g: CanvasRenderingContext2D, x: number, y: number, amount: number, draw: () => void) {
+  if (amount <= 0) return;
+  g.save();
+  g.translate(x, y);
+  if (amount < 1) {
+    g.globalAlpha *= Math.min(1, amount * 2);
+    const s = 0.3 + 0.7 * backOut(amount);
+    g.scale(s, s);
+  }
+  draw();
+  g.restore();
+}
+
+/** An X in the colour of the line, with a white edge, like the arrow symbol. */
+function drawCross(g: CanvasRenderingContext2D, k: number, color: string) {
+  const a = 9 * k;
+  g.lineCap = "round";
+  g.shadowColor = "rgba(0,0,0,0.45)";
+  g.shadowBlur = 6;
+  g.shadowOffsetY = 2;
+  g.beginPath();
+  g.moveTo(-a, -a);
+  g.lineTo(a, a);
+  g.moveTo(a, -a);
+  g.lineTo(-a, a);
+  g.lineWidth = 9 * k;
+  g.strokeStyle = "#ffffff";
+  g.stroke();
+  g.shadowColor = "transparent";
+  g.lineWidth = 5 * k;
+  g.strokeStyle = color;
+  g.stroke();
+}
+
+/** A chequered flag on a pole, planted at 0,0 and waving a little. */
+function drawChequeredFlag(g: CanvasRenderingContext2D, k: number, time: number) {
+  const pole = 50 * k;
+  const w = 34 * k;
+  const h = 22 * k;
+  const cols = 6;
+  const rows = 4;
+  const wave = (u: number) => Math.sin(u * Math.PI * 1.6 - time * 4) * 2.2 * k * u;
+  g.shadowColor = "rgba(0,0,0,0.45)";
+  g.shadowBlur = 6;
+  g.shadowOffsetY = 2;
+  g.fillStyle = "#e6e6e6";
+  g.fillRect(-1.5 * k, -pole, 3 * k, pole);
+  // the cloth: white with a dark outline, then the dark squares
+  const top = -pole + 1 * k;
+  const pt = (u: number, v: number): [number, number] => [1.5 * k + u * w, top + v * h + wave(u)];
+  const quad = (u0: number, v0: number, u1: number, v1: number) => {
+    const [ax, ay] = pt(u0, v0);
+    const [bx, by] = pt(u1, v0);
+    const [cx, cy] = pt(u1, v1);
+    const [dx, dy] = pt(u0, v1);
+    g.moveTo(ax, ay);
+    g.lineTo(bx, by);
+    g.lineTo(cx, cy);
+    g.lineTo(dx, dy);
+    g.closePath();
+  };
+  g.beginPath();
+  quad(0, 0, 1, 1);
+  g.fillStyle = "#f7f7f7";
+  g.fill();
+  g.shadowColor = "transparent";
+  g.beginPath();
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if ((r + c) % 2 === 0) quad(c / cols, r / rows, (c + 1) / cols, (r + 1) / rows);
+  g.fillStyle = "#0e0e0e";
+  g.fill();
+  g.beginPath();
+  quad(0, 0, 1, 1);
+  g.lineWidth = 1.2 * k;
+  g.strokeStyle = "#0e0e0e";
+  g.stroke();
+  anchorDot(g, k * 0.8);
+}
+
+/** The round side-view transport icon from the app's menus, on the line. */
+function drawLegIcon(g: CanvasRenderingContext2D, k: number, id: TransportId) {
+  const r = 15 * k;
+  g.shadowColor = "rgba(0,0,0,0.45)";
+  g.shadowBlur = 6;
+  g.shadowOffsetY = 2;
+  g.beginPath();
+  g.arc(0, 0, r, 0, Math.PI * 2);
+  g.fillStyle = "#0e0e0e";
+  g.fill();
+  g.shadowColor = "transparent";
+  g.lineWidth = 2 * k;
+  g.strokeStyle = "#ffffff";
+  g.stroke();
+  TRANSPORTS[id].glyph(g, r * 0.76, "#0e0e0e", "#ffffff");
+}
+
+function drawMarkers(g: CanvasRenderingContext2D, o: OverlayInput) {
+  const m = o.scene.look.markers;
+  const model = o.model;
+  if (!model || (m.start === "none" && m.finish === "none" && !m.legIcons)) return;
+  const k = o.scene.look.symbolScale;
+  const easing = o.scene.timing.easing;
+  const tl = o.timeline;
+  const path = model.path;
+  const legs = model.legs;
+
+  if (m.legIcons) {
+    for (const leg of legs) {
+      if (leg.s1 - leg.s0 <= 0) continue;
+      const p = o.toScreen(toLngLat(pointAt(path, (leg.s0 + leg.s1) / 2)));
+      const when = tl ? timeAtS(tl, leg.s1, easing) : null;
+      withPop(g, p.x, p.y, popAmount(o, when), () => drawLegIcon(g, k, leg.transport));
+    }
+  }
+  if (m.start === "cross") {
+    const p = o.toScreen(toLngLat(path.xy[0]));
+    withPop(g, p.x, p.y, 1, () => drawCross(g, k, lineColor(o.scene, legs[0].transport)));
+  }
+  if (m.finish !== "none") {
+    const p = o.toScreen(toLngLat(path.xy[path.xy.length - 1]));
+    const when = m.finishFromStart || !tl ? null : timeAtS(tl, path.length, easing);
+    const amount = popAmount(o, when);
+    const time = o.t ?? 0;
+    withPop(g, p.x, p.y, amount, () =>
+      m.finish === "cross" ? drawCross(g, k, lineColor(o.scene, legs[legs.length - 1].transport)) : drawChequeredFlag(g, k, time),
+    );
+  }
 }
 
 // ---------- signs ----------
@@ -474,6 +618,7 @@ function drawCredit(g: CanvasRenderingContext2D, o: OverlayInput) {
 export function drawOverlay(g: CanvasRenderingContext2D, o: OverlayInput): Hit[] {
   g.save();
   g.scale(o.scale, o.scale);
+  drawMarkers(g, o);
   const hits = drawSigns(g, o);
   drawSymbol(g, o);
   drawCompass(g, o);

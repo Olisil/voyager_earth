@@ -77,7 +77,7 @@ export them with Webflow DevLink.
   corners) and the timeline (speed per transport, pauses, sign times)
 - `lib/camera.ts`: fixed, start-to-end glide, follow; open/close on the whole route
 - `lib/mapScene.ts`: MapLibre themes and per-leg line layers
-- `lib/overlay.ts`: tip symbol, signs, compass, credit on a canvas, shared by preview and export
+- `lib/overlay.ts`: tip symbol, start and finish marks, transport icons on the legs, signs, compass, credit on a canvas, shared by preview and export
 - `lib/exporter.ts`: renders one or all scenes and encodes MP4; pauses while the tab is hidden
 - `lib/db.ts`: IndexedDB projects and project files
 - `lib/geocode.ts`: place search (Photon / OpenStreetMap)
@@ -95,7 +95,8 @@ Photon by Komoot for search. The export burns in a map credit by default.
 With the "Icon" symbol, the tip of the line is a top-down pointer (`lib/topdown.ts`): plane,
 balloon, airship, train and foot from the Figma assets, plus car, bus, motorcycle, bicycle and
 boat drawn in the same style. The train is a locomotive with two wagons that follow the line;
-walking leaves alternating footprints that fade out. Pointers are inverted on bright maps.
+walking leaves left and right footprints, spaced a stride apart and turned slightly outwards,
+that fade out. Pointers are inverted on bright maps.
 The round side-view icons in menus and lists are always white on black.
 
 Terrain can be shaded or drawn as height curves (thin grey contour lines generated in the
@@ -115,3 +116,10 @@ picker whose previews are rendered one at a time, around the current map view.
 
 More map themes, your own map image or symbol, photo at the tip, zoom per
 transport, preview playing all scenes in a row.
+
+## Start, finish and legs (Look step)
+
+Optional marks on the route: a cross at the start; a cross or a waving chequered flag at the
+finish (popping up when the line arrives, or shown from the start); and the round side-view
+transport icon from the menus in the middle of each leg, popping up as soon as that leg is done.
+They follow the symbol size, and the crosses take the colour of the line.
